@@ -1,0 +1,50 @@
+Option Explicit
+
+'=========================================================
+' KİBAR DOSYA SEÇİM PENCERESİ
+'
+' Aç butonu yerine özel buton adı gösterir.
+' Application.GetOpenFilename yerine bunu kullanacağız.
+'=========================================================
+Public Function DosyaSec_Excel( _
+    ByVal bilgilendirmeMesaji As String, _
+    ByVal pencereBasligi As String, _
+    Optional ByVal butonAdi As String = "Dosyayı Seç ve Devam Et", _
+    Optional ByVal sadeceMakroDosyasi As Boolean = False) As String
+
+    Dim fd As FileDialog
+
+    If Len(Trim$(bilgilendirmeMesaji)) > 0 Then
+        MsgBox bilgilendirmeMesaji, vbInformation, "Dosya Seçimi"
+    End If
+
+    Set fd = Application.FileDialog(msoFileDialogFilePicker)
+
+    With fd
+
+        .Title = pencereBasligi
+        .filters.Clear
+
+        If sadeceMakroDosyasi Then
+            .filters.Add "Excel Makro Dosyaları (*.xlsm)", "*.xlsm"
+        Else
+            .filters.Add "Excel Dosyaları (*.xlsx;*.xlsm;*.xlsb;*.xls)", "*.xlsx;*.xlsm;*.xlsb;*.xls"
+        End If
+
+        .AllowMultiSelect = False
+
+        On Error Resume Next
+        .ButtonName = butonAdi
+        On Error GoTo 0
+
+        If .Show <> -1 Then
+            DosyaSec_Excel = ""
+        Else
+            DosyaSec_Excel = .SelectedItems(1)
+        End If
+
+    End With
+
+End Function
+
+

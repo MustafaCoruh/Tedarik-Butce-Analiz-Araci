@@ -1,0 +1,476 @@
+Option Explicit
+
+Private Const MUD_TEMPLATE_SHEET As String = "SABLON_GRAFIKLER_MUDURLUK"
+
+'=========================================================
+' MÜDÜRLÜK GRAFİK ŞABLONLARINI .CRTX DOSYALARINDAN İÇE AKTARIR
+'
+' Çalıştırılacak makro:
+'   A2_MudurlukSablonGrafikleriOlustur
+'
+' Oluşacak grafik nesneleri:
+'   TPL_Mudurluk_Grafik1
+'   TPL_Mudurluk_Grafik2
+'   TPL_Mudurluk_Grafik3
+'   TPL_Mudurluk_Grafik4
+'=========================================================
+Public Sub A2_MudurlukSablonGrafikleriOlustur()
+
+    Dim wb As Workbook
+    Dim wsTpl As Worksheet
+    Dim cevap As VbMsgBoxResult
+
+    Dim pathGrafik1 As String
+    Dim pathGrafik2 As String
+    Dim pathGrafik3 As String
+    Dim pathGrafik4 As String
+
+    On Error GoTo HataYakala
+
+    Set wb = ThisWorkbook
+
+    ' Mevcut şablon sayfası varsa sıfırlama onayı al.
+    If Mudurluk_SheetExists(wb, MUD_TEMPLATE_SHEET) Then
+
+        cevap = MsgBox( _
+                    "Bu işlem mevcut müdürlük grafik şablonlarını sıfırlar." & _
+                    vbCrLf & vbCrLf & _
+                    "Devam etmek istiyor musunuz?", _
+                    vbYesNo + vbQuestion + vbDefaultButton2, _
+                    "Müdürlük Grafik Şablonlarını Sıfırla")
+
+        If cevap <> vbYes Then
+            Exit Sub
+        End If
+
+    End If
+
+    '=====================================================
+    ' DÖRT .CRTX DOSYASINI SIRAYLA SEÇTİR
+    '=====================================================
+    pathGrafik1 = Mudurluk_SelectCrtx( _
+                    "Grafik1.crtx dosyasını seçiniz." & vbCrLf & _
+                    "Proje - Kaynak Sistem - Statü - Bölüm grafiği")
+
+    If Len(pathGrafik1) = 0 Then Exit Sub
+
+    pathGrafik2 = Mudurluk_SelectCrtx( _
+                    "Grafik2.crtx dosyasını seçiniz." & vbCrLf & _
+                    "Talep Eden Kişi - Statü grafiği")
+
+    If Len(pathGrafik2) = 0 Then Exit Sub
+
+    pathGrafik3 = Mudurluk_SelectCrtx( _
+                    "Grafik3.crtx dosyasını seçiniz." & vbCrLf & _
+                    "Tedarik Sorumlusu - Ortalama Geçen Gün grafiği")
+
+    If Len(pathGrafik3) = 0 Then Exit Sub
+
+    pathGrafik4 = Mudurluk_SelectCrtx( _
+                    "Grafik4.crtx dosyasını seçiniz." & vbCrLf & _
+                    "Yatırım Bütçesi - Kullanılan - Bakiye grafiği")
+
+    If Len(pathGrafik4) = 0 Then Exit Sub
+
+    Application.ScreenUpdating = False
+    Application.DisplayAlerts = False
+    Application.EnableEvents = False
+
+    ' Eski şablon sayfasını sil.
+    On Error Resume Next
+    wb.Worksheets(MUD_TEMPLATE_SHEET).Delete
+    On Error GoTo HataYakala
+
+    ' Yeni şablon sayfasını oluştur.
+    Set wsTpl = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
+    wsTpl.Name = MUD_TEMPLATE_SHEET
+
+    Mudurluk_PrepareTemplateSheet wsTpl
+
+    '=====================================================
+    ' GRAFİK 1
+    '=====================================================
+    Mudurluk_CreateTemplateFromCrtx _
+        wsTarget:=wsTpl, _
+        templatePath:=pathGrafik1, _
+        chartObjectName:="TPL_Mudurluk_Grafik1", _
+        chartNo:=1, _
+        leftVal:=wsTpl.Range("A4").Left, _
+        topVal:=wsTpl.Range("A4").Top
+
+    '=====================================================
+    ' GRAFİK 2
+    '=====================================================
+    Mudurluk_CreateTemplateFromCrtx _
+        wsTarget:=wsTpl, _
+        templatePath:=pathGrafik2, _
+        chartObjectName:="TPL_Mudurluk_Grafik2", _
+        chartNo:=2, _
+        leftVal:=wsTpl.Range("N4").Left, _
+        topVal:=wsTpl.Range("N4").Top
+
+    '=====================================================
+    ' GRAFİK 3
+    '=====================================================
+    Mudurluk_CreateTemplateFromCrtx _
+        wsTarget:=wsTpl, _
+        templatePath:=pathGrafik3, _
+        chartObjectName:="TPL_Mudurluk_Grafik3", _
+        chartNo:=3, _
+        leftVal:=wsTpl.Range("A30").Left, _
+        topVal:=wsTpl.Range("A30").Top
+
+    '=====================================================
+    ' GRAFİK 4
+    '=====================================================
+    Mudurluk_CreateTemplateFromCrtx _
+        wsTarget:=wsTpl, _
+        templatePath:=pathGrafik4, _
+        chartObjectName:="TPL_Mudurluk_Grafik4", _
+        chartNo:=4, _
+        leftVal:=wsTpl.Range("N30").Left, _
+        topVal:=wsTpl.Range("N30").Top
+
+    ' Örnek verilerin bulunduğu sütunları gizle.
+    wsTpl.Columns("AZ:BK").Hidden = True
+
+    wsTpl.Activate
+    ActiveWindow.DisplayGridlines = False
+
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+
+    MsgBox "Müdürlük grafik şablonları başarıyla Excel dosyasının içine aktarılmıştır." & _
+           vbCrLf & vbCrLf & _
+           "Çalışma Sayfası: " & MUD_TEMPLATE_SHEET & vbCrLf & _
+           "Grafik Sayısı: 4" & vbCrLf & vbCrLf & _
+           "Artık diğer kullanıcıların bilgisayarında .crtx dosyalarının bulunması gerekmez.", _
+           vbInformation, "İşlem Tamamlandı"
+
+    Exit Sub
+
+HataYakala:
+
+    Application.DisplayAlerts = True
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+
+    MsgBox "Müdürlük grafik şablonları oluşturulurken hata oluştu:" & _
+           vbCrLf & vbCrLf & _
+           Err.Number & " - " & Err.Description, _
+           vbCritical, "Hata"
+
+End Sub
+
+'=========================================================
+' KULLANICIYA .CRTX DOSYASI SEÇTİRİR
+'=========================================================
+Private Function Mudurluk_SelectCrtx(ByVal promptText As String) As String
+
+    Dim fd As FileDialog
+
+    Set fd = Application.FileDialog(msoFileDialogFilePicker)
+
+    With fd
+
+        .Title = promptText
+        .filters.Clear
+        .filters.Add "Excel Grafik Şablonları", "*.crtx"
+        .AllowMultiSelect = False
+        .InitialFileName = Environ$("USERPROFILE") & "\Desktop\"
+
+        If .Show = -1 Then
+            Mudurluk_SelectCrtx = .SelectedItems(1)
+        Else
+            Mudurluk_SelectCrtx = ""
+        End If
+
+    End With
+
+End Function
+
+'=========================================================
+' ŞABLON SAYFASINI HAZIRLAR
+'=========================================================
+Private Sub Mudurluk_PrepareTemplateSheet(ByVal ws As Worksheet)
+
+    With ws
+
+        .Range("A1").Value = "MÜDÜRLÜK GRAFİK ŞABLONLARI"
+
+        .Range("A2").Value = _
+            "Bu sayfadaki grafiklerde yapılan görsel değişiklikler, " & _
+            "yeni oluşturulan müdürlük grafik raporlarına uygulanır."
+
+        .Range("A1").Font.Bold = True
+        .Range("A1").Font.Size = 18
+
+        .Range("A2").Font.Italic = True
+        .Range("A2").Font.Size = 11
+
+        .Columns("A:Z").ColumnWidth = 12
+
+    End With
+
+End Sub
+
+'=========================================================
+' .CRTX DOSYASINDAN GÖMÜLÜ ŞABLON GRAFİĞİ OLUŞTURUR
+'
+' Grafik önce doğru seri sayısı ve doğru seri isimleriyle
+' oluşturulur. Sonrasında .crtx şablonu uygulanır.
+'=========================================================
+Private Sub Mudurluk_CreateTemplateFromCrtx( _
+    ByVal wsTarget As Worksheet, _
+    ByVal templatePath As String, _
+    ByVal chartObjectName As String, _
+    ByVal chartNo As Long, _
+    ByVal leftVal As Double, _
+    ByVal topVal As Double)
+
+    Dim dataRange As Range
+    Dim co As ChartObject
+
+    On Error GoTo HataYakala
+
+    If Len(Dir(templatePath)) = 0 Then
+
+        Err.Raise vbObjectError + 3001, _
+                  "Mudurluk_CreateTemplateFromCrtx", _
+                  "Seçilen grafik şablonu bulunamadı:" & vbCrLf & templatePath
+
+    End If
+
+    Set dataRange = Mudurluk_CreateDummyData(wsTarget, chartNo)
+
+    Set co = wsTarget.ChartObjects.Add( _
+                    Left:=leftVal, _
+                    Top:=topVal, _
+                    Width:=720, _
+                    Height:=360)
+
+    co.Name = chartObjectName
+
+    With co.Chart
+
+        ' Şablon uygulanmadan önce doğru seri yapısını oluştur.
+        .SetSourceData Source:=dataRange
+        .ChartType = xlColumnClustered
+
+        ' Seçilen .crtx şablonunu uygula.
+        .ApplyChartTemplate templatePath
+
+        ' Gizli örnek veriler de grafikte gösterilebilsin.
+        .PlotVisibleOnly = False
+
+    End With
+
+    ' Başlık metinleri bir defaya mahsus oluşturulur.
+    ' Görsel biçimlendirme .crtx şablonundan gelir.
+    Mudurluk_ApplyInitialTitleTexts co.Chart, chartNo
+
+    co.Placement = xlFreeFloating
+
+    Exit Sub
+
+HataYakala:
+
+    Err.Raise Err.Number, _
+              "Mudurluk_CreateTemplateFromCrtx - " & chartObjectName, _
+              Err.Description
+
+End Sub
+
+'=========================================================
+' ŞABLON GRAFİĞİ İÇİN DOĞRU SERİ ADLARIYLA ÖRNEK VERİ OLUŞTURUR
+'=========================================================
+Private Function Mudurluk_CreateDummyData( _
+    ByVal wsTarget As Worksheet, _
+    ByVal chartNo As Long) As Range
+
+    Dim startRow As Long
+    Dim startCol As Long
+    Dim lastCol As Long
+
+    Select Case chartNo
+
+        Case 1
+
+            startRow = 2
+            startCol = wsTarget.Columns("AZ").Column
+
+            wsTarget.Cells(startRow, startCol).Value = "Kategori"
+            wsTarget.Cells(startRow, startCol + 1).Value = "Toplam Talep USD"
+            wsTarget.Cells(startRow, startCol + 2).Value = "Toplam Kalem Sayısı"
+
+            lastCol = startCol + 2
+
+        Case 2
+
+            startRow = 8
+            startCol = wsTarget.Columns("AZ").Column
+
+            wsTarget.Cells(startRow, startCol).Value = "Kategori"
+            wsTarget.Cells(startRow, startCol + 1).Value = "Toplam Talep USD"
+            wsTarget.Cells(startRow, startCol + 2).Value = "Toplam Kalem Sayısı"
+
+            lastCol = startCol + 2
+
+        Case 3
+
+            startRow = 14
+            startCol = wsTarget.Columns("AZ").Column
+
+            wsTarget.Cells(startRow, startCol).Value = "Kategori"
+            wsTarget.Cells(startRow, startCol + 1).Value = "Toplam Kalem Sayısı"
+            wsTarget.Cells(startRow, startCol + 2).Value = _
+                "Ortalama Son İşlem Sonrası Geçen Süre (Gün)"
+
+            lastCol = startCol + 2
+
+        Case 4
+
+            startRow = 20
+            startCol = wsTarget.Columns("AZ").Column
+
+            wsTarget.Cells(startRow, startCol).Value = "Kategori"
+            wsTarget.Cells(startRow, startCol + 1).Value = "Toplam YYS-Bütçe ($)"
+            wsTarget.Cells(startRow, startCol + 2).Value = "Toplam YYS-Kullanılan($)"
+            wsTarget.Cells(startRow, startCol + 3).Value = "Toplam YYS-Bakiye($)"
+
+            lastCol = startCol + 3
+
+        Case Else
+
+            Err.Raise vbObjectError + 3002, _
+                      "Mudurluk_CreateDummyData", _
+                      "Geçersiz grafik numarası: " & chartNo
+
+    End Select
+
+    ' Kategori verileri.
+    wsTarget.Cells(startRow + 1, startCol).Value = "Örnek 1"
+    wsTarget.Cells(startRow + 2, startCol).Value = "Örnek 2"
+    wsTarget.Cells(startRow + 3, startCol).Value = "Örnek 3"
+
+    ' Seri verileri.
+    wsTarget.Cells(startRow + 1, startCol + 1).Value = 100
+    wsTarget.Cells(startRow + 2, startCol + 1).Value = 150
+    wsTarget.Cells(startRow + 3, startCol + 1).Value = 125
+
+    wsTarget.Cells(startRow + 1, startCol + 2).Value = 10
+    wsTarget.Cells(startRow + 2, startCol + 2).Value = 15
+    wsTarget.Cells(startRow + 3, startCol + 2).Value = 12
+
+    If chartNo = 4 Then
+
+        wsTarget.Cells(startRow + 1, startCol + 3).Value = 40
+        wsTarget.Cells(startRow + 2, startCol + 3).Value = 65
+        wsTarget.Cells(startRow + 3, startCol + 3).Value = 50
+
+    End If
+
+    Set Mudurluk_CreateDummyData = wsTarget.Range( _
+                                        wsTarget.Cells(startRow, startCol), _
+                                        wsTarget.Cells(startRow + 3, lastCol))
+
+End Function
+
+'=========================================================
+' GRAFİK VE EKSEN BAŞLIK METİNLERİNİ İLK KEZ OLUŞTURUR
+'
+' Sadece metin atanır.
+' Renk, yazı tipi, dolgu ve diğer görünüm ayarları .crtx'ten gelir.
+'=========================================================
+Private Sub Mudurluk_ApplyInitialTitleTexts( _
+    ByVal ch As Chart, _
+    ByVal chartNo As Long)
+
+    Dim mainTitle As String
+    Dim primaryAxisTitle As String
+    Dim secondaryAxisTitle As String
+
+    Select Case chartNo
+
+        Case 1
+
+            mainTitle = _
+                "PROJE - KAYNAK SİSTEM - STATÜ - TALEP EDEN BÖLÜM - " & _
+                "MALİYET - KALEM SAYISI GRAFİĞİ"
+
+            primaryAxisTitle = "TOPLAM TALEP USD"
+            secondaryAxisTitle = "TOPLAM KALEM SAYISI"
+
+        Case 2
+
+            mainTitle = _
+                "KAYNAK SİSTEM - TALEP EDEN BÖLÜM - TALEP EDEN KİŞİ - " & _
+                "STATÜ - MALİYET - KALEM SAYISI GRAFİĞİ"
+
+            primaryAxisTitle = "TOPLAM TALEP USD"
+            secondaryAxisTitle = "TOPLAM KALEM SAYISI"
+
+        Case 3
+
+            mainTitle = _
+                "TEDARİK SORUMLUSU - KALEM SAYISI - SON İŞLEM TARİHİ " & _
+                "SONRASI ORTALAMA GEÇEN GÜN SAYISI - STATÜ GRAFİĞİ"
+
+            primaryAxisTitle = "TOPLAM KALEM SAYISI"
+
+            secondaryAxisTitle = _
+                "SON İŞLEM TARİHİ SONRASI ORTALAMA GEÇEN GÜN SAYISI"
+
+        Case 4
+
+            mainTitle = _
+                "KULLANILAN YATIRIM BÜTÇE NO - BÜTÇE - KULLANILAN - " & _
+                "BAKİYE GRAFİĞİ"
+
+            primaryAxisTitle = "BÜTÇE - KULLANILAN - KALAN MİKTAR"
+            secondaryAxisTitle = ""
+
+    End Select
+
+    On Error Resume Next
+
+    With ch
+
+        .HasTitle = True
+        .chartTitle.Text = mainTitle
+
+        .Axes(xlValue, xlPrimary).HasTitle = True
+        .Axes(xlValue, xlPrimary).AxisTitle.Text = primaryAxisTitle
+
+        If Len(secondaryAxisTitle) > 0 Then
+
+            .Axes(xlValue, xlSecondary).HasTitle = True
+            .Axes(xlValue, xlSecondary).AxisTitle.Text = secondaryAxisTitle
+
+        End If
+
+    End With
+
+    On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' SAYFA VAR MI?
+'=========================================================
+Private Function Mudurluk_SheetExists( _
+    ByVal wb As Workbook, _
+    ByVal sheetName As String) As Boolean
+
+    Dim ws As Worksheet
+
+    On Error Resume Next
+    Set ws = wb.Worksheets(sheetName)
+    On Error GoTo 0
+
+    Mudurluk_SheetExists = Not (ws Is Nothing)
+
+End Function
+
+

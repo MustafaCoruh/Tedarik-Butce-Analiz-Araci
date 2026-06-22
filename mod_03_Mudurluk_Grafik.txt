@@ -1,0 +1,2087 @@
+Option Explicit
+
+'=========================================================
+' V46 MÜDÜRLÜK BÜTÇE DURUM GRAFİKLERİ
+'
+' - Kaynak veriler seçilen Bütçe Durum Excel dosyasında kalır.
+' - VeriSeti ve Yatırım Bütçesi Kullanılan sayfaları kaynak olarak kullanılır.
+' - Dış .crtx bağımlılığı yoktur.
+' - Grafik şablonları SABLON_GRAFIKLER sayfasından alınır.
+' - Şablonlar çalışma anında geçici .crtx dosyasına dönüştürülüp uygulanır.
+' - Timeline ve slicerlar grafiğin altında dinamik oluşturulur.
+' - Timeline: 12 aya kadar Ay, 13-36 ay Çeyrek, 36 ay üzeri Yıl.
+' - Slicerlar tek satırda yan yana oluşturulur.
+' - Kılavuz çizgileri kapatılır.
+'=========================================================
+
+'=========================
+' ANA ÇALIŞTIR
+'=========================
+Public Sub Main()
+
+   Dim srcPath As Variant
+   Dim wbSrc As Workbook
+   Dim wbRep As Workbook
+   Dim rngVeriSeti As Range
+   Dim rngYYSKullanilan As Range
+   Dim savePath As String
+   Dim openedHere As Boolean
+   Dim filters As Variant
+   Dim rows As Variant
+   Dim valuesSpec As Variant
+   Dim slicerFields As Variant
+   Dim kayitKlasoru As String
+
+
+   On Error GoTo ErrHandler
+
+   Application.ScreenUpdating = False
+   Application.DisplayAlerts = False
+   Application.EnableEvents = False
+   Application.Calculation = xlCalculationManual
+
+    If gTopluCalismaAktif _
+      And Len(gSonButceDurumDosyaYolu) > 0 _
+      And Len(Dir(gSonButceDurumDosyaYolu)) > 0 Then
+    
+       srcPath = gSonButceDurumDosyaYolu
+    
+    Else
+    
+       srcPath = DosyaSec_Excel( _
+                   "Lütfen müdürlük grafiklerinin oluşturulacağı Bütçe Durum Excel dosyasını seçiniz.", _
+                   "Müdürlük Grafikleri İçin Bütçe Durum Dosyasını Seçiniz", _
+                   "Bütçe Durum Dosyasını Seç")
+    
+       If Len(CStr(srcPath)) = 0 Then GoTo SafeExit
+    
+    End If
+
+
+
+   Set wbSrc = GetOpenWorkbookByFullName(CStr(srcPath))
+
+   If wbSrc Is Nothing Then
+       Set wbSrc = Application.Workbooks.Open(Filename:=CStr(srcPath), ReadOnly:=True)
+       openedHere = True
+   End If
+
+   Set rngVeriSeti = GetDataRangeSafe(wbSrc, "VeriSeti")
+   Set rngYYSKullanilan = GetDataRangeSafe(wbSrc, "Yatırım Bütçesi Kullanılan")
+
+   If rngVeriSeti Is Nothing Then
+       MsgBox "'VeriSeti' sayfası bulunamadı veya boş.", vbCritical, "Eksik Veri"
+       GoTo SafeExit
+   End If
+
+   If rngYYSKullanilan Is Nothing Then
+       MsgBox "'Yatırım Bütçesi Kullanılan' sayfası bulunamadı veya boş.", vbCritical, "Eksik Veri"
+       GoTo SafeExit
+   End If
+
+   ' Grafik1-4 sayfalarını panel dosyasından kopyalayarak rapor dosyasını oluştur.
+   Set wbRep = CreateReportFromTemplates(ThisWorkbook, Array("Grafik1", "Grafik2", "Grafik3", "Grafik4"))
+
+    '=====================================================
+    ' GRAFİK 1
+    '=====================================================
+    filters = Array("Kaynak Sistem")
+
+    rows = Array( _
+        "Talep Eden Bölüm Grup", _
+        "Talep Eden Bölüm", _
+        "Proje", _
+        "Statü Grup", _
+        "Statü")
+
+    valuesSpec = Array( _
+        Array("Talep Toplam USD", xlSum, "Toplam Talep USD", True), _
+        Array("Giriş Tarihi", xlCount, "Toplam Kalem Sayısı", False))
+
+    slicerFields = Array( _
+        "Kaynak Sistem", _
+        "Talep Eden Bölüm Grup", _
+        "Talep Eden Bölüm", _
+        "Proje", _
+        "Statü Grup", _
+        "Statü", _
+        "Talep Eden Ad Soyad")
+
+    BuildPivotAndChart _
+        wsTarget:=wbRep.Worksheets("Grafik1"), _
+        srcRange:=rngVeriSeti, _
+        pivotName:="PVT_Grafik1", _
+        chartName:="CH_Grafik1", _
+        pivotAnchorName:="PivotBasla", _
+        defaultPivotCell:="A3", _
+        embeddedTemplateName:="TPL_Mudurluk_Grafik1", _
+        filters:=filters, _
+        rows:=rows, _
+        valuesSpec:=valuesSpec, _
+        timelineField:="Giriş Tarihi", _
+        slicerFields:=slicerFields
+
+    '=====================================================
+    ' GRAFİK 2
+    '=====================================================
+    filters = Array("Kaynak Sistem")
+
+    rows = Array( _
+        "Talep Eden Bölüm Grup", _
+        "Talep Eden Bölüm", _
+        "Talep Eden Ad Soyad", _
+        "Statü Grup", _
+        "Statü")
+
+    valuesSpec = Array( _
+        Array("Talep Toplam USD", xlSum, "Toplam Talep USD", True), _
+        Array("Giriş Tarihi", xlCount, "Toplam Kalem Sayısı", False))
+
+    slicerFields = Array( _
+        "Kaynak Sistem", _
+        "Talep Eden Bölüm Grup", _
+        "Talep Eden Bölüm", _
+        "Proje", _
+        "Statü Grup", _
+        "Statü", _
+        "Talep Eden Ad Soyad")
+
+    BuildPivotAndChart _
+        wsTarget:=wbRep.Worksheets("Grafik2"), _
+        srcRange:=rngVeriSeti, _
+        pivotName:="PVT_Grafik2", _
+        chartName:="CH_Grafik2", _
+        pivotAnchorName:="PivotBasla", _
+        defaultPivotCell:="A3", _
+        embeddedTemplateName:="TPL_Mudurluk_Grafik2", _
+        filters:=filters, _
+        rows:=rows, _
+        valuesSpec:=valuesSpec, _
+        timelineField:="Giriş Tarihi", _
+        slicerFields:=slicerFields
+
+    '=====================================================
+    ' GRAFİK 3
+    '=====================================================
+    filters = Array()
+
+    rows = Array( _
+        "Tedarik Sorumlusu Ad Soyad", _
+        "Statü")
+
+    valuesSpec = Array( _
+        Array("Giriş Tarihi", xlCount, "Toplam Kalem Sayısı", False), _
+        Array("Son İşlem Sonrası Geçen Süre (Gün)", xlAverage, "Ortalama Son İşlem Sonrası Geçen Süre (Gün)", False))
+
+    slicerFields = Array( _
+        "Kaynak Sistem", _
+        "Proje", _
+        "Statü Grup", _
+        "Statü")
+
+    BuildPivotAndChart _
+        wsTarget:=wbRep.Worksheets("Grafik3"), _
+        srcRange:=rngVeriSeti, _
+        pivotName:="PVT_Grafik3", _
+        chartName:="CH_Grafik3", _
+        pivotAnchorName:="PivotBasla", _
+        defaultPivotCell:="A3", _
+        embeddedTemplateName:="TPL_Mudurluk_Grafik3", _
+        filters:=filters, _
+        rows:=rows, _
+        valuesSpec:=valuesSpec, _
+        timelineField:="Giriş Tarihi", _
+        slicerFields:=slicerFields
+
+    '=====================================================
+    ' GRAFİK 4
+    '=====================================================
+    filters = Array()
+
+    rows = Array( _
+        "YYS-Bütçe No - Proje - Tanım", _
+        "YYS-Bölüm")
+
+    valuesSpec = Array( _
+        Array("Toplam YYS-Bütçe ($)", xlSum, "Toplam YYS-Bütçe ($)", False), _
+        Array("Toplam YYS-Kullanılan($)", xlSum, "Toplam YYS-Kullanılan($)", False), _
+        Array("Toplam YYS-Bakiye($)", xlSum, "Toplam YYS-Bakiye($)", False))
+
+    slicerFields = Array( _
+        "YYS-Bütçe No - Proje - Tanım", _
+        "YYS-Bölüm")
+
+    BuildPivotAndChart _
+        wsTarget:=wbRep.Worksheets("Grafik4"), _
+        srcRange:=rngYYSKullanilan, _
+        pivotName:="PVT_Grafik4", _
+        chartName:="CH_Grafik4", _
+        pivotAnchorName:="PivotBasla", _
+        defaultPivotCell:="A3", _
+        embeddedTemplateName:="TPL_Mudurluk_Grafik4", _
+        filters:=filters, _
+        rows:=rows, _
+        valuesSpec:=valuesSpec, _
+        timelineField:="", _
+        slicerFields:=slicerFields
+
+kayitKlasoru = Cikti_KlasoruAl( _
+                    "03 - Müdürlük Bütçe Durum Grafikleri", _
+                    Environ$("USERPROFILE") & "\Desktop")
+
+
+    savePath = MakeUniquePath( _
+                    kayitKlasoru & _
+                    "\V46 Müdürlük Bütçe Durum Grafikleri " & _
+                    Format(Date, "dd.mm.yyyy") & ".xlsx")
+
+
+   wbRep.SaveAs Filename:=savePath, FileFormat:=xlOpenXMLWorkbook
+   wbRep.Close SaveChanges:=False
+
+   If openedHere Then
+       wbSrc.Close SaveChanges:=False
+   End If
+
+   MsgBox "V46 Müdürlük Bütçe Durum Grafik Raporu başarıyla oluşturulmuştur." & _
+          vbCrLf & vbCrLf & _
+          "Kayıt Yolu:" & vbCrLf & savePath, _
+          vbInformation, "İşlem Tamamlandı"
+
+SafeExit:
+
+   Application.DisplayAlerts = True
+   Application.ScreenUpdating = True
+   Application.EnableEvents = True
+   Application.Calculation = xlCalculationAutomatic
+
+   Exit Sub
+
+ErrHandler:
+
+   On Error Resume Next
+
+   If Not wbRep Is Nothing Then
+       wbRep.Close SaveChanges:=False
+   End If
+
+   If openedHere Then
+       If Not wbSrc Is Nothing Then
+           wbSrc.Close SaveChanges:=False
+       End If
+   End If
+
+   On Error GoTo 0
+
+   MsgBox "Müdürlük Bütçe Durum Grafikleri makrosunda hata oluştu:" & _
+          vbCrLf & vbCrLf & _
+          Err.Number & " - " & Err.Description, _
+          vbCritical, "Hata"
+
+   Resume SafeExit
+
+End Sub
+
+'=========================================================
+' ŞABLON SAYFALARINDAN RAPOR DOSYASI OLUŞTURUR
+'=========================================================
+Private Function CreateReportFromTemplates(ByVal wbTpl As Workbook, _
+                                          ByVal sheetNames As Variant) As Workbook
+
+   Dim wb As Workbook
+   Dim wsTemp As Worksheet
+   Dim src As Worksheet
+   Dim dst As Worksheet
+   Dim i As Long
+
+   Set wb = Application.Workbooks.Add(xlWBATWorksheet)
+
+   Set wsTemp = wb.Worksheets(1)
+   wsTemp.Name = "TEMP_DELETE_ME"
+
+   For i = LBound(sheetNames) To UBound(sheetNames)
+
+       Set src = Nothing
+
+       On Error Resume Next
+       Set src = wbTpl.Worksheets(CStr(sheetNames(i)))
+       On Error GoTo 0
+
+       If src Is Nothing Then
+
+           Set dst = wb.Worksheets.Add(After:=wb.Sheets(wb.Sheets.Count))
+           dst.Name = CStr(sheetNames(i))
+
+       Else
+
+           src.Copy After:=wb.Sheets(wb.Sheets.Count)
+           wb.Sheets(wb.Sheets.Count).Name = CStr(sheetNames(i))
+
+       End If
+
+   Next i
+
+   Application.DisplayAlerts = False
+   wsTemp.Delete
+   Application.DisplayAlerts = True
+
+   wb.Worksheets(1).Activate
+
+   Set CreateReportFromTemplates = wb
+
+End Function
+
+'=========================================================
+' PIVOT + GRAFİK + TIMELINE + SLICER OLUŞTURUR
+'=========================================================
+Private Sub BuildPivotAndChart( _
+   ByVal wsTarget As Worksheet, _
+   ByVal srcRange As Range, _
+   ByVal pivotName As String, _
+   ByVal chartName As String, _
+   ByVal pivotAnchorName As String, _
+   ByVal defaultPivotCell As String, _
+   ByVal embeddedTemplateName As String, _
+   ByVal filters As Variant, _
+   ByVal rows As Variant, _
+   ByVal valuesSpec As Variant, _
+   ByVal timelineField As String, _
+   ByVal slicerFields As Variant)
+
+   Dim startCell As Range
+   Dim srcAddr As String
+   Dim pc As PivotCache
+   Dim pvt As PivotTable
+   Dim pivotRange As Range
+   Dim chartSource As Range
+   Dim anch As Range
+   Dim co As ChartObject
+   Dim widthVal As Double
+   Dim heightVal As Double
+   Dim i As Long
+
+   On Error GoTo ErrHandlerLocal
+
+   ClearTargetSheetObjects wsTarget
+
+   Set startCell = GetNamedCellSafe(wsTarget, pivotAnchorName)
+
+   If startCell Is Nothing Then
+       Set startCell = wsTarget.Range(defaultPivotCell)
+   End If
+
+   srcAddr = srcRange.Address( _
+                   RowAbsolute:=True, _
+                   ColumnAbsolute:=True, _
+                   ReferenceStyle:=xlR1C1, _
+                   External:=True)
+
+   Set pc = wsTarget.Parent.PivotCaches.Create( _
+                   SourceType:=xlDatabase, _
+                   SourceData:=srcAddr, _
+                   Version:=xlPivotTableVersion15)
+
+   Set pvt = pc.CreatePivotTable( _
+                   TableDestination:=startCell, _
+                   TableName:=pivotName, _
+                   DefaultVersion:=xlPivotTableVersion15)
+
+   With pvt
+
+       .RowAxisLayout xlCompactRow
+       .NullString = ""
+       .RepeatAllLabels xlRepeatLabels
+
+   End With
+
+   If HasArrayItems(filters) Then
+
+       For i = LBound(filters) To UBound(filters)
+           AddFieldIfExists pvt, CStr(filters(i)), xlPageField
+       Next i
+
+   End If
+
+   If HasArrayItems(rows) Then
+
+       For i = LBound(rows) To UBound(rows)
+           AddFieldIfExists pvt, CStr(rows(i)), xlRowField
+       Next i
+
+   End If
+
+   If HasArrayItems(valuesSpec) Then
+
+       For i = LBound(valuesSpec) To UBound(valuesSpec)
+
+           AddDataFieldWithSettings _
+               pvt:=pvt, _
+               fieldName:=CStr(valuesSpec(i)(0)), _
+               func:=CLng(valuesSpec(i)(1)), _
+               caption:=CStr(valuesSpec(i)(2)), _
+               formatUSD:=CBool(valuesSpec(i)(3))
+
+       Next i
+
+   End If
+
+   ApplyNumberFormats wsTarget, pvt
+
+   Set pivotRange = pvt.TableRange2
+   Set chartSource = pvt.TableRange1
+
+   Set anch = pivotRange.Cells(pivotRange.rows.Count, 1).Offset(2, 0)
+
+   widthVal = wsTarget.Range(anch, anch.Offset(0, 99)).Width
+   heightVal = wsTarget.Range(anch, anch.Offset(149, 0)).Height
+
+   Set co = CreateChartFromEmbeddedTemplate( _
+                   wsTarget:=wsTarget, _
+                   sourceRange:=chartSource, _
+                   embeddedTemplateName:=embeddedTemplateName, _
+                   leftVal:=anch.Left, _
+                   topVal:=anch.Top, _
+                   widthVal:=widthVal, _
+                   heightVal:=heightVal)
+
+   co.Name = chartName
+   co.Placement = xlFreeFloating
+   
+   ResizeChartWidthByCategories co, wsTarget.Name
+
+   TurnOffGridlines wsTarget
+
+   AddDynamicTimelineAndSlicers _
+       wsOut:=wsTarget, _
+       srcRange:=srcRange, _
+       pvt:=pvt, _
+       ch:=co, _
+       timelineField:=timelineField, _
+       slicerFields:=slicerFields
+
+   Exit Sub
+
+ErrHandlerLocal:
+
+   Err.Raise Err.Number, _
+             "BuildPivotAndChart - " & wsTarget.Name, _
+             Err.Description
+
+End Sub
+
+'=========================================================
+' SAYFADAKİ ESKİ PIVOT VE GRAFİKLERİ TEMİZLER
+'=========================================================
+Private Sub ClearTargetSheetObjects(ByVal ws As Worksheet)
+
+   Dim co As ChartObject
+   Dim pvt As PivotTable
+
+   On Error Resume Next
+
+   For Each co In ws.ChartObjects
+       co.Delete
+   Next co
+
+   For Each pvt In ws.PivotTables
+       pvt.TableRange2.Clear
+   Next pvt
+
+   On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' GÖMÜLÜ ŞABLONDAN GRAFİK OLUŞTURUR
+'
+' Şablon görünümü kod tarafından ezilmez.
+' SABLON_GRAFIKLER sayfasındaki grafik şablonu geçerlidir.
+'=========================================================
+Private Function CreateChartFromEmbeddedTemplate( _
+   ByVal wsTarget As Worksheet, _
+   ByVal sourceRange As Range, _
+   ByVal embeddedTemplateName As String, _
+   ByVal leftVal As Double, _
+   ByVal topVal As Double, _
+   ByVal widthVal As Double, _
+   ByVal heightVal As Double) As ChartObject
+
+   Dim co As ChartObject
+
+   Set co = wsTarget.ChartObjects.Add( _
+                   Left:=leftVal, _
+                   Top:=topVal, _
+                   Width:=widthVal, _
+                   Height:=heightVal)
+
+   co.Chart.SetSourceData Source:=sourceRange
+
+   If Not ApplyEmbeddedTemplateToChart(co.Chart, embeddedTemplateName) Then
+       co.Chart.ChartType = xlColumnClustered
+   End If
+
+   Set CreateChartFromEmbeddedTemplate = co
+
+End Function
+
+'=========================================================
+' GÖMÜLÜ GRAFİĞİ GEÇİCİ .CRTX OLARAK KAYDEDER VE UYGULAR '
+' Ardından şablon grafiğindeki yapısal özellikleri de ' hedef grafiğe aktarır:
+' - Seri grafik türleri
+' - Birincil / ikincil eksen
+' - Veri etiketleri
+' - Grafik ve eksen başlık metinleri
+'=========================================================
+Private Function ApplyEmbeddedTemplateToChart( _
+    ByVal targetChart As Chart, _
+    ByVal embeddedTemplateName As String) As Boolean
+
+    Dim wsTpl As Worksheet
+    Dim coTpl As ChartObject
+    Dim tempPath As String
+
+    On Error GoTo Failed
+
+    Set wsTpl = ThisWorkbook.Worksheets("SABLON_GRAFIKLER_MUDURLUK")
+    Set coTpl = wsTpl.ChartObjects(embeddedTemplateName)
+
+    tempPath = Environ$("TEMP") & "\" & _
+               CleanObjectName(embeddedTemplateName) & "_" & _
+               Format(Now, "yyyymmdd_hhnnss") & "_" & _
+               CStr(CLng(Timer * 1000)) & ".crtx"
+
+    On Error Resume Next
+
+    If Len(Dir(tempPath)) > 0 Then
+        Kill tempPath
+    End If
+
+    On Error GoTo Failed
+
+    ' Görsel şablonu uygula.
+    coTpl.Chart.SaveChartTemplate tempPath
+    targetChart.ApplyChartTemplate tempPath
+
+    ' .crtx ile tam taşınmayan yapısal özellikleri
+    ' doğrudan şablon grafiğinden aktar.
+    ApplyTemplateStructureFromChart _
+        sourceChart:=coTpl.Chart, _
+        targetChart:=targetChart
+
+    ApplyEmbeddedTemplateToChart = True
+
+CleanExit:
+
+    On Error Resume Next
+
+    If Len(tempPath) > 0 Then
+
+        If Len(Dir(tempPath)) > 0 Then
+            Kill tempPath
+        End If
+
+    End If
+
+    On Error GoTo 0
+
+    Exit Function
+
+Failed:
+
+    ApplyEmbeddedTemplateToChart = False
+    Resume CleanExit
+
+End Function
+
+
+'=========================================================
+' TIMELINE VE SLICERLARI GRAFİĞİN ALTINA YERLEŞTİRİR
+'=========================================================
+Private Sub AddDynamicTimelineAndSlicers( _
+   ByVal wsOut As Worksheet, _
+   ByVal srcRange As Range, _
+   ByVal pvt As PivotTable, _
+   ByVal ch As ChartObject, _
+   ByVal timelineField As String, _
+   ByVal slicerFields As Variant)
+
+   Dim baseLeft As Double
+   Dim timelineTop As Double
+   Dim slicerTop As Double
+   Dim timelineWidth As Double
+   Dim timelineHeight As Double
+   Dim gap As Double
+   Dim timelineAdded As Boolean
+
+   Dim actualTimelineField As String
+   Dim actualSlicerField As String
+   Dim fieldName As String
+
+   Dim curLeft As Double
+   Dim slicerW As Double
+   Dim slicerH As Double
+   Dim i As Long
+
+   gap = 14
+
+   baseLeft = ch.Left
+   timelineTop = ch.Top + ch.Height + gap
+   timelineHeight = 95
+
+   If Len(Trim$(timelineField)) > 0 Then
+
+       actualTimelineField = ResolvePivotFieldName(pvt, timelineField)
+
+       If Len(actualTimelineField) > 0 Then
+
+           timelineWidth = CalculateTimelineWidth(srcRange, actualTimelineField)
+
+           timelineAdded = AddTimelineIfPossible( _
+                               wsOut:=wsOut, _
+                               pvt:=pvt, _
+                               srcRange:=srcRange, _
+                               fieldName:=actualTimelineField, _
+                               leftVal:=baseLeft, _
+                               topVal:=timelineTop, _
+                               widthVal:=timelineWidth, _
+                               heightVal:=timelineHeight)
+
+       End If
+
+   End If
+
+   If timelineAdded Then
+       slicerTop = timelineTop + timelineHeight + gap
+   Else
+       slicerTop = ch.Top + ch.Height + gap
+   End If
+
+   curLeft = baseLeft
+
+   If HasArrayItems(slicerFields) Then
+
+       For i = LBound(slicerFields) To UBound(slicerFields)
+
+           fieldName = CStr(slicerFields(i))
+           actualSlicerField = ResolvePivotFieldName(pvt, fieldName)
+
+           If Len(actualSlicerField) > 0 Then
+
+               slicerW = CalculateSlicerWidth(srcRange, actualSlicerField)
+               slicerH = CalculateSlicerHeight(srcRange, actualSlicerField)
+
+
+               AddSlicerIfPossible _
+                   wsOut:=wsOut, _
+                   pvt:=pvt, _
+                   fieldName:=actualSlicerField, _
+                   leftVal:=curLeft, _
+                   topVal:=slicerTop, _
+                   widthVal:=slicerW, _
+                   heightVal:=slicerH
+
+               ' Tüm slicerlar timeline genişliğinden bağımsız,
+               ' tek satırda yan yana dizilir.
+               curLeft = curLeft + slicerW + gap
+
+           End If
+
+       Next i
+
+   End If
+
+End Sub
+
+'=========================================================
+' TIMELINE EKLER
+'
+' Timeline oluşturulamazsa tarih için normal slicer eklenmez.
+'=========================================================
+Private Function AddTimelineIfPossible( _
+   ByVal wsOut As Worksheet, _
+   ByVal pvt As PivotTable, _
+   ByVal srcRange As Range, _
+   ByVal fieldName As String, _
+   ByVal leftVal As Double, _
+   ByVal topVal As Double, _
+   ByVal widthVal As Double, _
+   ByVal heightVal As Double) As Boolean
+
+   Dim wb As Workbook
+   Dim sc As SlicerCache
+   Dim sl As Slicer
+   Dim timelineName As String
+
+   Dim minD As Date
+   Dim maxD As Date
+   Dim hasDateRange As Boolean
+   Dim monthCount As Long
+   Dim levelCode As Long
+
+   On Error GoTo Failed
+
+   Set wb = wsOut.Parent
+
+   wb.Activate
+   wsOut.Activate
+
+   pvt.RefreshTable
+
+   If Not PivotFieldExists(pvt, fieldName) Then GoTo Failed
+
+   hasDateRange = GetMinMaxDates(srcRange, fieldName, minD, maxD)
+
+   timelineName = UniqueSlicerName( _
+                       wb, _
+                       "TL_" & wsOut.Name & "_" & fieldName)
+
+   Set sc = wb.SlicerCaches.Add2( _
+                   pvt, _
+                   fieldName, _
+                   , _
+                   xlTimeline)
+
+   Set sl = sc.Slicers.Add( _
+                   wsOut, _
+                   , _
+                   timelineName, _
+                   fieldName)
+
+   With sl
+       .Left = leftVal
+       .Top = topVal
+       .Width = widthVal
+       .Height = heightVal
+   End With
+
+   FixShapePlacement wsOut, timelineName
+
+   If hasDateRange Then
+
+       monthCount = GetMonthCountBetweenDates(minD, maxD)
+       levelCode = GetSmartTimelineLevel(monthCount)
+
+       On Error Resume Next
+
+       ' Timeline seviye kodları:
+       ' 0 = Yıl
+       ' 1 = Çeyrek
+       ' 2 = Ay
+       ' 3 = Gün
+       sc.TimelineState.Level = levelCode
+
+       ' Timeline sadece kaynak verideki min-max tarih aralığını gösterir.
+       sc.TimelineState.SetFilterDateRange minD, maxD
+
+       On Error GoTo 0
+
+   End If
+
+   AddTimelineIfPossible = True
+   Exit Function
+
+Failed:
+
+   AddTimelineIfPossible = False
+
+End Function
+
+'=========================================================
+' NORMAL SLICER EKLER
+'=========================================================
+Private Sub AddSlicerIfPossible( _
+   ByVal wsOut As Worksheet, _
+   ByVal pvt As PivotTable, _
+   ByVal fieldName As String, _
+   ByVal leftVal As Double, _
+   ByVal topVal As Double, _
+   ByVal widthVal As Double, _
+   ByVal heightVal As Double)
+
+   Dim wb As Workbook
+   Dim sc As SlicerCache
+   Dim sl As Slicer
+   Dim slicerName As String
+
+   On Error GoTo SafeExit
+
+   Set wb = wsOut.Parent
+
+   wb.Activate
+   wsOut.Activate
+
+   pvt.RefreshTable
+
+   slicerName = UniqueSlicerName( _
+                       wb, _
+                       "SL_" & wsOut.Name & "_" & fieldName)
+
+   ' Önce Add2 yöntemi denenir.
+   On Error Resume Next
+   Err.Clear
+
+   Set sc = wb.SlicerCaches.Add2(pvt, fieldName)
+
+   ' Bazı Excel sürümlerinde Add2 sorun çıkarırsa Add yöntemi denenir.
+   If sc Is Nothing Or Err.Number <> 0 Then
+
+       Err.Clear
+       Set sc = wb.SlicerCaches.Add(pvt, fieldName)
+
+   End If
+
+   On Error GoTo SafeExit
+
+   If sc Is Nothing Then Exit Sub
+
+   Set sl = sc.Slicers.Add( _
+                   wsOut, _
+                   , _
+                   slicerName, _
+                   fieldName)
+
+   With sl
+
+       .Left = leftVal
+       .Top = topVal
+       .Width = widthVal
+       .Height = heightVal
+
+       On Error Resume Next
+       .NumberOfColumns = 1
+       .RowHeight = 22
+       On Error GoTo SafeExit
+
+   End With
+
+   FixShapePlacement wsOut, slicerName
+
+SafeExit:
+
+End Sub
+
+'=========================================================
+' TIMELINE GENİŞLİĞİNİ TARİH ARALIĞINA VE SEVİYEYE GÖRE
+' DİNAMİK HESAPLAR
+'
+' 12 aya kadar  : Ay
+' 13-36 ay      : Çeyrek
+' 36 ay üzeri   : Yıl
+'=========================================================
+Private Function CalculateTimelineWidth( _
+   ByVal srcRange As Range, _
+   ByVal dateFieldName As String) As Double
+
+   Dim minD As Date
+   Dim maxD As Date
+
+   Dim monthCount As Long
+   Dim unitCount As Long
+   Dim levelCode As Long
+   Dim calculatedWidth As Double
+
+   If GetMinMaxDates(srcRange, dateFieldName, minD, maxD) Then
+
+       monthCount = GetMonthCountBetweenDates(minD, maxD)
+       levelCode = GetSmartTimelineLevel(monthCount)
+
+       Select Case levelCode
+
+           Case 2
+               ' Ay seviyesi
+               unitCount = monthCount
+               calculatedWidth = 220 + (unitCount * 70)
+
+           Case 1
+               ' Çeyrek seviyesi
+               unitCount = Application.WorksheetFunction.RoundUp(monthCount / 3, 0)
+               calculatedWidth = 240 + (unitCount * 95)
+
+           Case 0
+               ' Yıl seviyesi
+               unitCount = DateDiff( _
+                               "yyyy", _
+                               DateSerial(Year(minD), 1, 1), _
+                               DateSerial(Year(maxD), 1, 1)) + 1
+
+               calculatedWidth = 260 + (unitCount * 110)
+
+           Case Else
+               calculatedWidth = 600
+
+       End Select
+
+       If calculatedWidth < 520 Then calculatedWidth = 520
+
+       CalculateTimelineWidth = calculatedWidth
+
+   Else
+
+       CalculateTimelineWidth = 600
+
+   End If
+
+End Function
+
+'=========================================================
+' SLICER GENİŞLİĞİNİ EN UZUN METNE GÖRE HESAPLAR
+'=========================================================
+Private Function CalculateSlicerWidth( _
+   ByVal srcRange As Range, _
+   ByVal fieldName As String) As Double
+
+   Dim colIx As Long
+   Dim r As Long
+   Dim maxLen As Long
+   Dim txt As String
+   Dim widthVal As Double
+
+   colIx = FindColumnIndexInRange(srcRange, fieldName)
+
+   If colIx = 0 Then
+       CalculateSlicerWidth = 180
+       Exit Function
+   End If
+
+   maxLen = Len(fieldName)
+
+   For r = 2 To srcRange.rows.Count
+
+       txt = Trim$(CStr(srcRange.Cells(r, colIx).Value))
+
+       If Len(txt) > maxLen Then
+           maxLen = Len(txt)
+       End If
+
+   Next r
+
+   widthVal = 70 + (maxLen * 7.5)
+
+   If widthVal < 180 Then widthVal = 180
+
+   CalculateSlicerWidth = widthVal
+
+End Function
+
+'=========================================================
+' SLICER YÜKSEKLİĞİNİ BENZERSİZ SEÇENEK SAYISINA GÖRE
+' HESAPLAR
+'=========================================================
+Private Function CalculateSlicerHeight( _
+   ByVal srcRange As Range, _
+   ByVal fieldName As String) As Double
+
+   Dim itemCount As Long
+   Dim heightVal As Double
+
+   itemCount = CountUniqueValues(srcRange, fieldName)
+
+   If itemCount < 1 Then itemCount = 1
+
+   ' Başlık alanı + her seçenek için yaklaşık 24 punto.
+   heightVal = 58 + (itemCount * 24)
+
+   If heightVal < 150 Then heightVal = 150
+
+   CalculateSlicerHeight = heightVal
+
+End Function
+
+'=========================================================
+' BİR ALANDAKİ BENZERSİZ DEĞER SAYISINI BULUR
+'=========================================================
+Private Function CountUniqueValues( _
+   ByVal srcRange As Range, _
+   ByVal fieldName As String) As Long
+
+   Dim dict As Object
+   Dim colIx As Long
+   Dim r As Long
+   Dim txt As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+   dict.CompareMode = vbTextCompare
+
+   colIx = FindColumnIndexInRange(srcRange, fieldName)
+
+   If colIx = 0 Then
+       CountUniqueValues = 1
+       Exit Function
+   End If
+
+   For r = 2 To srcRange.rows.Count
+
+       txt = Trim$(CStr(srcRange.Cells(r, colIx).Value))
+
+       If Len(txt) > 0 Then
+
+           If Not dict.Exists(txt) Then
+               dict.Add txt, True
+           End If
+
+       End If
+
+   Next r
+
+   CountUniqueValues = dict.Count
+
+End Function
+
+'=========================================================
+' TARİH ARALIĞINI BULUR
+'=========================================================
+Private Function GetMinMaxDates( _
+   ByVal srcRange As Range, _
+   ByVal fieldName As String, _
+   ByRef minD As Date, _
+   ByRef maxD As Date) As Boolean
+
+   Dim colIx As Long
+   Dim r As Long
+   Dim d As Date
+   Dim found As Boolean
+
+   colIx = FindColumnIndexInRange(srcRange, fieldName)
+
+   If colIx = 0 Then Exit Function
+
+   For r = 2 To srcRange.rows.Count
+
+       If TryGetDate(srcRange.Cells(r, colIx).Value, d) Then
+
+           If IsReasonableDate(d) Then
+
+               If Not found Then
+
+                   minD = d
+                   maxD = d
+                   found = True
+
+               Else
+
+                   If d < minD Then minD = d
+                   If d > maxD Then maxD = d
+
+               End If
+
+           End If
+
+       End If
+
+   Next r
+
+   GetMinMaxDates = found
+
+End Function
+
+'=========================================================
+' DEĞERİ TARİHE ÇEVİRMEYE ÇALIŞIR
+'=========================================================
+Private Function TryGetDate( _
+   ByVal v As Variant, _
+   ByRef outDate As Date) As Boolean
+
+   Dim s As String
+   Dim p As Variant
+
+   On Error GoTo Failed
+
+   If IsDate(v) Then
+
+       outDate = CDate(v)
+       TryGetDate = True
+       Exit Function
+
+   End If
+
+   If IsNumeric(v) Then
+
+       If CDbl(v) > 20000 And CDbl(v) < 80000 Then
+
+           outDate = DateSerial(1899, 12, 30) + CDbl(v)
+           TryGetDate = True
+           Exit Function
+
+       End If
+
+   End If
+
+   s = Trim$(CStr(v))
+
+   If Len(s) = 0 Then GoTo Failed
+
+   ' Saat bilgisi varsa kaldır.
+   If InStr(1, s, " ", vbTextCompare) > 0 Then
+       s = Split(s, " ")(0)
+   End If
+
+   s = Replace(s, "/", ".")
+   s = Replace(s, "-", ".")
+
+   p = Split(s, ".")
+
+   If UBound(p) = 2 Then
+
+       If Len(CStr(p(2))) = 4 Then
+
+           outDate = DateSerial( _
+                           CLng(p(2)), _
+                           CLng(p(1)), _
+                           CLng(p(0)))
+
+           TryGetDate = True
+           Exit Function
+
+       End If
+
+   End If
+
+Failed:
+
+   TryGetDate = False
+
+End Function
+
+'=========================================================
+' HATALI / AŞIRI TARİHLERİ TIMELINE HESABINDAN ÇIKARIR
+'=========================================================
+Private Function IsReasonableDate(ByVal d As Date) As Boolean
+
+   IsReasonableDate = (Year(d) >= 2000 And Year(d) <= 2100)
+
+End Function
+
+'=========================================================
+' İKİ TARİH ARASINDAKİ AY SAYISINI BULUR
+'=========================================================
+Private Function GetMonthCountBetweenDates( _
+   ByVal minD As Date, _
+   ByVal maxD As Date) As Long
+
+   Dim startMonth As Date
+   Dim endMonth As Date
+
+   startMonth = DateSerial(Year(minD), Month(minD), 1)
+   endMonth = DateSerial(Year(maxD), Month(maxD), 1)
+
+   GetMonthCountBetweenDates = DateDiff("m", startMonth, endMonth) + 1
+
+   If GetMonthCountBetweenDates < 1 Then
+       GetMonthCountBetweenDates = 1
+   End If
+
+End Function
+
+'=========================================================
+' TIMELINE SEVİYESİNİ TARİH ARALIĞINA GÖRE BELİRLER
+'
+' 0 = Yıl
+' 1 = Çeyrek
+' 2 = Ay
+'=========================================================
+Private Function GetSmartTimelineLevel(ByVal monthCount As Long) As Long
+
+   If monthCount <= 12 Then
+
+       GetSmartTimelineLevel = 2
+
+   ElseIf monthCount <= 36 Then
+
+       GetSmartTimelineLevel = 1
+
+   Else
+
+       GetSmartTimelineLevel = 0
+
+   End If
+
+End Function
+
+'=========================================================
+' PIVOT SATIR / FİLTRE ALANI EKLER
+'=========================================================
+Private Sub AddFieldIfExists( _
+   ByVal pvt As PivotTable, _
+   ByVal fieldName As String, _
+   ByVal orient As XlPivotFieldOrientation)
+
+   Dim actualName As String
+
+   actualName = ResolvePivotFieldName(pvt, fieldName)
+
+   If Len(actualName) = 0 Then Exit Sub
+
+   On Error Resume Next
+
+   With pvt.PivotFields(actualName)
+       .Orientation = orient
+       .Position = .Position
+   End With
+
+   On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' PIVOT DEĞER ALANI EKLER
+'=========================================================
+Private Sub AddDataFieldWithSettings( _
+   ByVal pvt As PivotTable, _
+   ByVal fieldName As String, _
+   ByVal func As XlConsolidationFunction, _
+   ByVal caption As String, _
+   ByVal formatUSD As Boolean)
+
+   Dim actualName As String
+   Dim pf As PivotField
+   Dim df As PivotField
+
+   actualName = ResolvePivotFieldName(pvt, fieldName)
+
+   If Len(actualName) = 0 Then Exit Sub
+
+   On Error Resume Next
+
+   Set pf = pvt.PivotFields(actualName)
+   Set df = pvt.AddDataField(pf, caption, func)
+
+   If Not df Is Nothing Then
+
+       If formatUSD Then
+           df.NumberFormat = "[$$-409]#,##0"
+       End If
+
+   End If
+
+   On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' PIVOT ALAN ADINI ESKİ / YENİ BAŞLIKLARA GÖRE ÇÖZER
+'=========================================================
+Private Function ResolvePivotFieldName( _
+   ByVal pvt As PivotTable, _
+   ByVal wanted As String) As String
+
+   Dim candidates As Variant
+   Dim candidate As Variant
+   Dim pf As PivotField
+
+   candidates = GetFieldCandidates(wanted)
+
+   ' Önce doğrudan aday isimleri dene.
+   On Error Resume Next
+
+   For Each candidate In candidates
+
+       Err.Clear
+       Set pf = Nothing
+
+       Set pf = pvt.PivotFields(CStr(candidate))
+
+       If Err.Number = 0 And Not pf Is Nothing Then
+
+           ResolvePivotFieldName = pf.Name
+           Exit Function
+
+       End If
+
+   Next candidate
+
+   On Error GoTo 0
+
+   ' Sonra normalize edilmiş metin ile tüm alanları tara.
+   For Each pf In pvt.PivotFields
+
+       For Each candidate In candidates
+
+           If NormalizeText(pf.Name) = NormalizeText(CStr(candidate)) Then
+
+               ResolvePivotFieldName = pf.Name
+               Exit Function
+
+           End If
+
+       Next candidate
+
+   Next pf
+
+   ResolvePivotFieldName = ""
+
+End Function
+
+'=========================================================
+' ALAN ADI ADAYLARI
+'=========================================================
+Private Function GetFieldCandidates(ByVal wanted As String) As Variant
+
+   Select Case NormalizeText(wanted)
+
+       Case NormalizeText("YYS-Bütçe No - Proje - Tanım")
+
+           GetFieldCandidates = Array( _
+               "YYS-Bütçe No - Proje - Tanım", _
+               "YYS-Bütçe No3", _
+               "Bütçe No - Proje - Tanım")
+
+       Case NormalizeText("YYS-Bölüm")
+
+           GetFieldCandidates = Array( _
+               "YYS-Bölüm", _
+               "Bölüm")
+
+       Case NormalizeText("Toplam YYS-Bütçe ($)")
+
+           GetFieldCandidates = Array( _
+               "Toplam YYS-Bütçe ($)", _
+               "YYS-Bütçe ($)", _
+               "YYS-Bütçe$")
+
+       Case NormalizeText("Toplam YYS-Kullanılan($)")
+
+           GetFieldCandidates = Array( _
+               "Toplam YYS-Kullanılan($)", _
+               "Toplam YYS-Kullanılan ($)", _
+               "YYS-Kullanılan($)", _
+               "YYS-Kullanılan ($)")
+
+       Case NormalizeText("Toplam YYS-Bakiye($)")
+
+           GetFieldCandidates = Array( _
+               "Toplam YYS-Bakiye($)", _
+               "Toplam YYS-Bakiye ($)", _
+               "YYS-Bakiye($)", _
+               "YYS-Bakiye ($)")
+
+       Case NormalizeText("Huma Son Gözden Geçirme Tarihi")
+
+           GetFieldCandidates = Array( _
+               "Huma Son Gözden Geçirme Tarihi", _
+               "Huma Son Gözden Geçirme Tarihi2")
+
+       Case NormalizeText("Huma Son Açıklama")
+
+           GetFieldCandidates = Array( _
+               "Huma Son Açıklama", _
+               "Red Nedeni")
+
+       Case Else
+
+           GetFieldCandidates = Array(wanted)
+
+   End Select
+
+End Function
+
+'=========================================================
+' PIVOT ALANI VAR MI?
+'=========================================================
+Private Function PivotFieldExists( _
+   ByVal pvt As PivotTable, _
+   ByVal fieldName As String) As Boolean
+
+   Dim pf As PivotField
+
+   On Error Resume Next
+
+   Set pf = pvt.PivotFields(fieldName)
+
+   On Error GoTo 0
+
+   PivotFieldExists = Not (pf Is Nothing)
+
+End Function
+
+'=========================================================
+' PIVOT SAYISAL FORMATLARINI UYGULAR
+'=========================================================
+Private Sub ApplyNumberFormats( _
+   ByVal ws As Worksheet, _
+   ByVal pvt As PivotTable)
+
+   On Error Resume Next
+
+   Select Case ws.Name
+
+       Case "Grafik1", "Grafik2"
+
+           pvt.DataFields("Toplam Talep USD").NumberFormat = "[$$-409]#,##0"
+
+       Case "Grafik3"
+
+           pvt.DataFields("Ortalama Son İşlem Sonrası Geçen Süre (Gün)").NumberFormat = "0"
+           pvt.DataFields("Ortalama Son İşlem Sonrası Geçen Süre ( gün)").NumberFormat = "0"
+
+       Case "Grafik4"
+
+           pvt.DataFields("Toplam YYS-Bütçe ($)").NumberFormat = "[$$-409]#,##0"
+           pvt.DataFields("Toplam YYS-Kullanılan($)").NumberFormat = "[$$-409]#,##0"
+           pvt.DataFields("Toplam YYS-Bakiye($)").NumberFormat = "[$$-409]#,##0"
+
+   End Select
+
+   On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' VARIANT ARRAY İÇİNDE ELEMAN VAR MI?
+'=========================================================
+Private Function HasArrayItems(ByVal v As Variant) As Boolean
+
+   Dim lb As Long
+   Dim ub As Long
+
+   On Error GoTo NoItems
+
+   If Not IsArray(v) Then GoTo NoItems
+
+   lb = LBound(v)
+   ub = UBound(v)
+
+   HasArrayItems = (ub >= lb)
+   Exit Function
+
+NoItems:
+
+   HasArrayItems = False
+
+End Function
+
+'=========================================================
+' AÇIK WORKBOOK'U TAM YOL İLE BULUR
+'=========================================================
+Private Function GetOpenWorkbookByFullName( _
+   ByVal fullName As String) As Workbook
+
+   Dim wb As Workbook
+
+   For Each wb In Application.Workbooks
+
+       If StrComp(wb.fullName, fullName, vbTextCompare) = 0 Then
+
+           Set GetOpenWorkbookByFullName = wb
+           Exit Function
+
+       End If
+
+   Next wb
+
+End Function
+
+'=========================================================
+' SAYFADAKİ GÜVENLİ VERİ ARALIĞINI BULUR
+'=========================================================
+Private Function GetDataRangeSafe( _
+   ByVal wb As Workbook, _
+   ByVal sheetName As String) As Range
+
+   Dim ws As Worksheet
+   Dim ur As Range
+   Dim lastRow As Long
+   Dim lastCol As Long
+
+   On Error Resume Next
+   Set ws = wb.Worksheets(sheetName)
+   On Error GoTo 0
+
+   If ws Is Nothing Then Exit Function
+
+   Set ur = ws.UsedRange
+
+   If ur Is Nothing Then Exit Function
+
+   If Application.WorksheetFunction.CountA(ur.rows(1)) = 0 Then Exit Function
+
+   lastRow = ur.Row + ur.rows.Count - 1
+   lastCol = ur.Column + ur.Columns.Count - 1
+
+   Set GetDataRangeSafe = ws.Range( _
+                               ws.Cells(1, 1), _
+                               ws.Cells(lastRow, lastCol))
+
+End Function
+
+'=========================================================
+' SAYFA İÇİNDE İSİMLENDİRİLMİŞ HÜCREYİ BULUR
+'=========================================================
+Private Function GetNamedCellSafe( _
+   ByVal ws As Worksheet, _
+   ByVal nm As String) As Range
+
+   On Error Resume Next
+
+   Set GetNamedCellSafe = ws.Parent.Names(nm).RefersToRange
+
+   If GetNamedCellSafe Is Nothing Then
+       Set GetNamedCellSafe = ws.Range(nm)
+   End If
+
+   On Error GoTo 0
+
+End Function
+
+'=========================================================
+' KAYNAK ARALIKTA BAŞLIK SÜTUNUNU BULUR
+'=========================================================
+Private Function FindColumnIndexInRange( _
+   ByVal srcRange As Range, _
+   ByVal headerName As String) As Long
+
+   Dim i As Long
+
+   For i = 1 To srcRange.Columns.Count
+
+       If NormalizeText(CStr(srcRange.Cells(1, i).Value)) = _
+          NormalizeText(headerName) Then
+
+           FindColumnIndexInRange = i
+           Exit Function
+
+       End If
+
+   Next i
+
+   FindColumnIndexInRange = 0
+
+End Function
+
+'=========================================================
+' METİNLERİ KARŞILAŞTIRMA İÇİN NORMALİZE EDER
+'=========================================================
+Private Function NormalizeText(ByVal s As String) As String
+
+   Dim t As String
+
+   t = Trim$(CStr(s))
+   t = Replace(t, Chr(160), " ")
+
+   t = Replace(t, "İ", "I")
+   t = Replace(t, "I", "ı")
+
+   t = LCase$(t)
+
+   t = Replace(t, "ı", "i")
+   t = Replace(t, "ş", "s")
+   t = Replace(t, "ğ", "g")
+   t = Replace(t, "ç", "c")
+   t = Replace(t, "ö", "o")
+   t = Replace(t, "ü", "u")
+
+   Do While InStr(t, "  ") > 0
+       t = Replace(t, "  ", " ")
+   Loop
+
+   NormalizeText = t
+
+End Function
+
+'=========================================================
+' KILAVUZ ÇİZGİLERİNİ KAPATIR
+'=========================================================
+Private Sub TurnOffGridlines(ByVal ws As Worksheet)
+
+   On Error Resume Next
+
+   ws.Activate
+   ActiveWindow.DisplayGridlines = False
+
+   On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' GRAFİK / SLICER / TIMELINE NESNESİNİ HÜCRELERDEN BAĞIMSIZ
+' HALE GETİRİR
+'=========================================================
+Private Sub FixShapePlacement( _
+   ByVal ws As Worksheet, _
+   ByVal shapeName As String)
+
+   On Error Resume Next
+
+   With ws.Shapes(shapeName)
+       .Placement = xlFreeFloating
+       .LockAspectRatio = msoFalse
+   End With
+
+   On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' MASAÜSTÜ YOLUNU DÖNDÜRÜR
+'=========================================================
+Private Function GetDesktopPath() As String
+
+   GetDesktopPath = Environ$("USERPROFILE") & "\Desktop"
+
+End Function
+
+'=========================================================
+' AYNI DOSYA VARSA BENZERSİZ DOSYA YOLU OLUŞTURUR
+'=========================================================
+Private Function MakeUniquePath(ByVal fullPath As String) As String
+
+   Dim base As String
+   Dim ext As String
+   Dim candidate As String
+   Dim p As Long
+   Dim i As Long
+
+   p = InStrRev(fullPath, ".")
+
+   If p > 0 Then
+
+       base = Left$(fullPath, p - 1)
+       ext = Mid$(fullPath, p)
+
+   Else
+
+       base = fullPath
+       ext = ""
+
+   End If
+
+   candidate = fullPath
+   i = 2
+
+   Do While Len(Dir(candidate)) > 0
+
+       candidate = base & " (" & i & ")" & ext
+       i = i + 1
+
+   Loop
+
+   MakeUniquePath = candidate
+
+End Function
+
+'=========================================================
+' BENZERSİZ SLICER / TIMELINE NESNE ADI OLUŞTURUR
+'=========================================================
+Private Function UniqueSlicerName( _
+   ByVal wb As Workbook, _
+   ByVal baseName As String) As String
+
+   Dim nm As String
+   Dim suffix As String
+   Dim i As Long
+
+   nm = SafeSlicerName(baseName)
+
+   If Not SlicerNameExists(wb, nm) Then
+
+       UniqueSlicerName = nm
+       Exit Function
+
+   End If
+
+   i = 2
+
+   Do
+
+       suffix = "_" & i
+       nm = SafeSlicerName(baseName)
+
+       If Len(nm) > 100 - Len(suffix) Then
+           nm = Left$(nm, 100 - Len(suffix))
+       End If
+
+       nm = nm & suffix
+       i = i + 1
+
+   Loop While SlicerNameExists(wb, nm)
+
+   UniqueSlicerName = nm
+
+End Function
+
+'=========================================================
+' SLICER / TIMELINE ADI VAR MI?
+'=========================================================
+Private Function SlicerNameExists( _
+   ByVal wb As Workbook, _
+   ByVal slicerName As String) As Boolean
+
+   Dim sc As SlicerCache
+   Dim sl As Slicer
+
+   On Error Resume Next
+
+   For Each sc In wb.SlicerCaches
+
+       For Each sl In sc.Slicers
+
+           If StrComp(sl.Name, slicerName, vbTextCompare) = 0 Then
+
+               SlicerNameExists = True
+               Exit Function
+
+           End If
+
+       Next sl
+
+   Next sc
+
+   On Error GoTo 0
+
+   SlicerNameExists = False
+
+End Function
+
+'=========================================================
+' GÜVENLİ SLICER ADI OLUŞTURUR
+'=========================================================
+Private Function SafeSlicerName(ByVal nm As String) As String
+
+   nm = CleanObjectName(nm)
+
+   If Len(nm) = 0 Then nm = "Slicer"
+
+   If Len(nm) > 100 Then
+       nm = Left$(nm, 100)
+   End If
+
+   SafeSlicerName = nm
+
+End Function
+
+'=========================================================
+' NESNE / DOSYA ADINI TEMİZLER
+'=========================================================
+Private Function CleanObjectName(ByVal nm As String) As String
+
+   nm = Trim$(nm)
+
+   nm = Replace(nm, " ", "_")
+   nm = Replace(nm, "-", "_")
+   nm = Replace(nm, ".", "_")
+   nm = Replace(nm, "/", "_")
+   nm = Replace(nm, "\", "_")
+   nm = Replace(nm, ":", "_")
+   nm = Replace(nm, "?", "_")
+   nm = Replace(nm, "*", "_")
+   nm = Replace(nm, "[", "_")
+   nm = Replace(nm, "]", "_")
+   nm = Replace(nm, "(", "_")
+   nm = Replace(nm, ")", "_")
+
+   nm = Replace(nm, "ı", "i")
+   nm = Replace(nm, "İ", "I")
+   nm = Replace(nm, "ğ", "g")
+   nm = Replace(nm, "Ğ", "G")
+   nm = Replace(nm, "ü", "u")
+   nm = Replace(nm, "Ü", "U")
+   nm = Replace(nm, "ş", "s")
+   nm = Replace(nm, "Ş", "S")
+   nm = Replace(nm, "ö", "o")
+   nm = Replace(nm, "Ö", "O")
+   nm = Replace(nm, "ç", "c")
+   nm = Replace(nm, "Ç", "C")
+
+   CleanObjectName = nm
+
+End Function
+
+'=========================================================
+' ŞABLON GRAFİĞİNİN YAPISAL ÖZELLİKLERİNİ HEDEF GRAFİĞE ' AKTARIR '
+' Tüm ayarlar şablon grafiğinden okunur.
+' Kod içerisinde grafik türü veya eksen tercihi sabit değildir.
+'=========================================================
+Private Sub ApplyTemplateStructureFromChart( _
+    ByVal sourceChart As Chart, _
+    ByVal targetChart As Chart)
+
+    Dim sourceSeriesCount As Long
+    Dim targetSeriesCount As Long
+    Dim seriesCount As Long
+    Dim i As Long
+
+    On Error Resume Next
+
+    sourceSeriesCount = sourceChart.SeriesCollection.Count
+    targetSeriesCount = targetChart.SeriesCollection.Count
+
+    seriesCount = sourceSeriesCount
+
+    If targetSeriesCount < seriesCount Then
+        seriesCount = targetSeriesCount
+    End If
+
+    For i = 1 To seriesCount
+
+        ' Seri türü ve eksen bilgisi şablondan gelir.
+        targetChart.SeriesCollection(i).ChartType = _
+            sourceChart.SeriesCollection(i).ChartType
+
+        targetChart.SeriesCollection(i).axisGroup = _
+            sourceChart.SeriesCollection(i).axisGroup
+
+        ' Veri etiketi ayarları şablondan gelir.
+        CopyDataLabelSettingsFromTemplate _
+            sourceSeries:=sourceChart.SeriesCollection(i), _
+            targetSeries:=targetChart.SeriesCollection(i)
+
+    Next i
+
+    ' Grafik ve eksen başlık metinleri şablondan gelir.
+    CopyChartTextFromTemplate _
+        sourceChart:=sourceChart, _
+        targetChart:=targetChart
+
+    On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' VERİ ETİKETİ AYARLARINI ŞABLONDAN HEDEF SERİYE AKTARIR '=========================================================
+Private Sub CopyDataLabelSettingsFromTemplate( _
+    ByVal sourceSeries As Series, _
+    ByVal targetSeries As Series)
+
+    On Error Resume Next
+
+    targetSeries.HasDataLabels = sourceSeries.HasDataLabels
+
+    If sourceSeries.HasDataLabels Then
+
+        With targetSeries.DataLabels
+
+            .ShowValue = sourceSeries.DataLabels.ShowValue
+            .ShowCategoryName = sourceSeries.DataLabels.ShowCategoryName
+            .ShowSeriesName = sourceSeries.DataLabels.ShowSeriesName
+            .ShowLegendKey = sourceSeries.DataLabels.ShowLegendKey
+            .ShowPercentage = sourceSeries.DataLabels.ShowPercentage
+            .ShowBubbleSize = sourceSeries.DataLabels.ShowBubbleSize
+
+            .Separator = sourceSeries.DataLabels.Separator
+            .Position = sourceSeries.DataLabels.Position
+            .NumberFormat = sourceSeries.DataLabels.NumberFormat
+
+        End With
+
+    End If
+
+    On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' GRAFİK VE EKSEN BAŞLIK METİNLERİNİ ŞABLONDAN AKTARIR '=========================================================
+Private Sub CopyChartTextFromTemplate( _
+    ByVal sourceChart As Chart, _
+    ByVal targetChart As Chart)
+
+    On Error Resume Next
+
+    targetChart.HasTitle = sourceChart.HasTitle
+
+    If sourceChart.HasTitle Then
+        targetChart.chartTitle.Text = sourceChart.chartTitle.Text
+    End If
+
+    CopyAxisTitleFromTemplate _
+        sourceChart:=sourceChart, _
+        targetChart:=targetChart, _
+        axisType:=xlCategory, _
+        axisGroup:=xlPrimary
+
+    CopyAxisTitleFromTemplate _
+        sourceChart:=sourceChart, _
+        targetChart:=targetChart, _
+        axisType:=xlValue, _
+        axisGroup:=xlPrimary
+
+    CopyAxisTitleFromTemplate _
+        sourceChart:=sourceChart, _
+        targetChart:=targetChart, _
+        axisType:=xlValue, _
+        axisGroup:=xlSecondary
+
+    On Error GoTo 0
+
+End Sub
+
+'=========================================================
+' TEK BİR EKSEN BAŞLIĞINI ŞABLONDAN AKTARIR '=========================================================
+Private Sub CopyAxisTitleFromTemplate( _
+    ByVal sourceChart As Chart, _
+    ByVal targetChart As Chart, _
+    ByVal axisType As XlAxisType, _
+    ByVal axisGroup As XlAxisGroup)
+
+    Dim sourceAxis As Axis
+    Dim targetAxis As Axis
+
+    On Error GoTo SafeExit
+
+    Set sourceAxis = sourceChart.Axes(axisType, axisGroup)
+    Set targetAxis = targetChart.Axes(axisType, axisGroup)
+
+    targetAxis.HasTitle = sourceAxis.HasTitle
+
+    If sourceAxis.HasTitle Then
+        targetAxis.AxisTitle.Text = sourceAxis.AxisTitle.Text
+    End If
+
+SafeExit:
+
+End Sub
+
+
+
+'=========================================================
+' GRAFİK GENİŞLİĞİNİ GERÇEK KATEGORİ SAYISINA GÖRE AYARLAR
+'
+' Şablon görünümüne dokunmaz; yalnızca grafik nesnesinin
+' yatay genişliğini değiştirir.
+'=========================================================
+Private Sub ResizeChartWidthByCategories( _
+    ByVal co As ChartObject, _
+    ByVal sheetName As String)
+
+    Dim categoryCount As Long
+    Dim maxLabelLength As Long
+
+    Dim widthPerCategory As Double
+    Dim calculatedWidth As Double
+
+    On Error GoTo SafeExit
+
+    GetChartCategoryMetrics _
+        ch:=co.Chart, _
+        categoryCount:=categoryCount, _
+        maxLabelLength:=maxLabelLength
+
+    If categoryCount < 1 Then Exit Sub
+
+    ' En uzun kategori metnine göre her kategoriye ayrılacak alan.
+    Select Case maxLabelLength
+
+        Case Is <= 10
+            widthPerCategory = 45
+
+        Case Is <= 20
+            widthPerCategory = 65
+
+        Case Is <= 35
+            widthPerCategory = 85
+
+        Case Is <= 50
+            widthPerCategory = 105
+
+        Case Else
+            widthPerCategory = 125
+
+    End Select
+
+    ' Grafik4 bütçe tanımları uzun olduğu için biraz daha fazla alan ver.
+    If sheetName = "Grafik4" Then
+
+        If widthPerCategory < 105 Then
+            widthPerCategory = 105
+        End If
+
+    End If
+
+    ' Sol ve sağ eksen, lejant ve grafik kenarları için 500 punto ek alan.
+    calculatedWidth = 500 + (categoryCount * widthPerCategory)
+
+    ' Az kategorili grafikler aşırı küçük kalmasın.
+    If calculatedWidth < 2500 Then
+        calculatedWidth = 2500
+    End If
+
+    ' Çok yüksek kategori sayılarında Excel nesnesi aşırı büyümesin.
+    If calculatedWidth > 45000 Then
+        calculatedWidth = 45000
+    End If
+
+    co.Width = calculatedWidth
+
+SafeExit:
+
+End Sub
+
+'=========================================================
+' GRAFİKTE GERÇEKTEN ÇİZİLEN KATEGORİ SAYISINI VE
+' EN UZUN KATEGORİ METNİNİ BULUR
+'=========================================================
+Private Sub GetChartCategoryMetrics( _
+    ByVal ch As Chart, _
+    ByRef categoryCount As Long, _
+    ByRef maxLabelLength As Long)
+
+    Dim xRange As Range
+    Dim xValues As Variant
+    Dim item As Variant
+    Dim cell As Range
+    Dim txt As String
+
+    categoryCount = 0
+    maxLabelLength = 0
+
+    On Error GoTo SafeExit
+
+    If ch.SeriesCollection.Count = 0 Then Exit Sub
+
+    ' Önce XValues bir Range olarak okunmaya çalışılır.
+    On Error Resume Next
+    Set xRange = ch.SeriesCollection(1).xValues
+    On Error GoTo SafeExit
+
+    If Not xRange Is Nothing Then
+
+        For Each cell In xRange.Cells
+
+            txt = Trim$(CStr(cell.Value))
+
+            categoryCount = categoryCount + 1
+
+            If Len(txt) > maxLabelLength Then
+                maxLabelLength = Len(txt)
+            End If
+
+        Next cell
+
+        Exit Sub
+
+    End If
+
+    ' Range değilse Variant / Array olarak okunur.
+    xValues = ch.SeriesCollection(1).xValues
+
+    If IsArray(xValues) Then
+
+        For Each item In xValues
+
+            txt = Trim$(CStr(item))
+
+            categoryCount = categoryCount + 1
+
+            If Len(txt) > maxLabelLength Then
+                maxLabelLength = Len(txt)
+            End If
+
+        Next item
+
+    Else
+
+        txt = Trim$(CStr(xValues))
+
+        If Len(txt) > 0 Then
+
+            categoryCount = 1
+            maxLabelLength = Len(txt)
+
+        End If
+
+    End If
+
+SafeExit:
+
+End Sub
+
+

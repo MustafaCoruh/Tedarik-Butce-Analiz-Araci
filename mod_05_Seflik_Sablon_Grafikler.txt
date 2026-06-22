@@ -1,0 +1,265 @@
+Option Explicit
+
+'=========================================================
+' AŞAMA 1 - MAKRO DOSYASI İÇİNE ŞABLON GRAFİKLERİ OLUŞTURUR
+'
+' Bu makro sadece kurulum için 1 kez çalıştırılır.
+'
+' Oluşturduğu sayfa:
+'   SEFLIK_SABLON_GRAFIKLER
+'
+' Oluşturduğu grafik nesneleri:
+'   TPL_Grafik1
+'   TPL_Grafik2
+'
+' Sonraki aşamalarda dış .crtx dosyası yerine bu grafikler kullanılacak.
+'=========================================================
+Public Sub A1_SablonGrafikleriOlustur()
+
+   Dim wb As Workbook
+   Dim ws As Worksheet
+   Dim co1 As ChartObject
+   Dim co2 As ChartObject
+   Dim wsKontrol As Worksheet
+   Dim cevap As VbMsgBoxResult
+
+   Set wb = ThisWorkbook
+   
+   ' Eğer şablon sayfası zaten varsa kullanıcıdan onay al
+On Error Resume Next
+Set wsKontrol = wb.Worksheets("SEFLIK_SABLON_GRAFIKLER")
+On Error GoTo 0
+
+If Not wsKontrol Is Nothing Then
+
+    cevap = MsgBox("Bu işlem mevcut şablon grafiklerini sıfırlar." & vbCrLf & vbCrLf & _
+                   "Devam etmek istiyor musunuz?", _
+                   vbYesNo + vbQuestion + vbDefaultButton2, _
+                   "Şablon Grafiklerini Sıfırla")
+
+    If cevap <> vbYes Then
+        MsgBox "İşlem iptal edildi. Mevcut şablon grafikler korunmuştur.", vbInformation, "İptal"
+        Exit Sub
+    End If
+
+End If
+
+
+   Application.ScreenUpdating = False
+   Application.DisplayAlerts = False
+
+   ' Eski şablon sayfası varsa sil
+   On Error Resume Next
+   wb.Worksheets("SEFLIK_SABLON_GRAFIKLER").Delete
+   On Error GoTo 0
+
+   Application.DisplayAlerts = True
+
+   ' Yeni şablon sayfasını oluştur
+   Set ws = wb.Worksheets.Add(After:=wb.Worksheets(wb.Worksheets.Count))
+   ws.Name = "SEFLIK_SABLON_GRAFIKLER"
+
+   ' Sayfa başlığı
+   ws.Range("A1").Value = "GRAFİK ŞABLONLARI"
+   ws.Range("A1").Font.Bold = True
+   ws.Range("A1").Font.Size = 18
+
+   ws.Range("A2").Value = "Bu sayfadaki grafikler, şeflik raporlarında dış .crtx dosyasına ihtiyaç kalmadan şablon olarak kullanılacaktır."
+   ws.Range("A2").Font.Size = 10
+
+   '=====================================================
+   ' GRAFİK 1 İÇİN ÖRNEK VERİ
+   '=====================================================
+   ws.Range("A5").Value = "Kategori"
+   ws.Range("B5").Value = "Toplam Talep USD"
+   ws.Range("C5").Value = "Toplam Kalem Sayısı"
+
+   ws.Range("A6").Value = "Proje A"
+   ws.Range("A7").Value = "Proje B"
+   ws.Range("A8").Value = "Proje C"
+
+   ws.Range("B6").Value = 150000
+   ws.Range("B7").Value = 275000
+   ws.Range("B8").Value = 90000
+
+   ws.Range("C6").Value = 8
+   ws.Range("C7").Value = 14
+   ws.Range("C8").Value = 5
+
+   ' Grafik 1 oluştur
+   Set co1 = ws.ChartObjects.Add(Left:=ws.Range("A11").Left, _
+                                 Top:=ws.Range("A11").Top, _
+                                 Width:=900, _
+                                 Height:=420)
+
+   co1.Name = "TPL_Grafik1"
+
+   With co1.Chart
+
+       .SetSourceData Source:=ws.Range("A5:C8")
+       .ChartType = xlColumnClustered
+
+       ' 2. seri olan Kalem Sayısı çizgi + ikincil eksen
+       On Error Resume Next
+       .SeriesCollection(2).ChartType = xlLine
+       .SeriesCollection(2).axisGroup = xlSecondary
+       On Error GoTo 0
+
+       .HasTitle = True
+       .chartTitle.Text = "PROJE - STATÜ - MALİYET - KALEM SAYISI GRAFİĞİ"
+
+       With .chartTitle
+           .Format.Fill.Visible = msoTrue
+           .Format.Fill.Solid
+           .Format.Fill.ForeColor.RGB = RGB(192, 0, 0)
+           .Format.TextFrame2.TextRange.Font.Bold = msoTrue
+           .Format.TextFrame2.TextRange.Font.Size = 26
+           .Format.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+       End With
+
+       .HasLegend = True
+       .Legend.Position = xlLegendPositionBottom
+
+       On Error Resume Next
+       .Legend.Format.TextFrame2.TextRange.Font.Bold = msoTrue
+       .Legend.Format.TextFrame2.TextRange.Font.Size = 14
+       On Error GoTo 0
+
+       ' Sol eksen
+       On Error Resume Next
+       With .Axes(xlValue, xlPrimary)
+           .HasTitle = True
+           .AxisTitle.Text = "TOPLAM TALEP USD"
+           .AxisTitle.Font.Bold = True
+           .AxisTitle.Font.Size = 18
+           .TickLabels.NumberFormat = "[$$-409]#,##0"
+       End With
+
+       ' Sağ eksen
+       With .Axes(xlValue, xlSecondary)
+           .HasTitle = True
+           .AxisTitle.Text = "TOPLAM KALEM SAYISI"
+           .AxisTitle.Font.Bold = True
+           .AxisTitle.Font.Size = 18
+           .TickLabels.NumberFormat = "0"
+       End With
+       On Error GoTo 0
+
+       ' Veri etiketleri
+       Dim s As Series
+       For Each s In .SeriesCollection
+           s.HasDataLabels = True
+           s.DataLabels.ShowValue = True
+           On Error Resume Next
+           s.DataLabels.Format.TextFrame2.TextRange.Font.Bold = msoTrue
+           s.DataLabels.Format.TextFrame2.TextRange.Font.Size = 12
+           On Error GoTo 0
+       Next s
+
+   End With
+
+   '=====================================================
+   ' GRAFİK 2 İÇİN ÖRNEK VERİ
+   '=====================================================
+   ws.Range("E5").Value = "Talep Eden"
+   ws.Range("F5").Value = "Toplam Talep USD"
+   ws.Range("G5").Value = "Toplam Kalem Sayısı"
+
+   ws.Range("E6").Value = "Ahmet Yılmaz"
+   ws.Range("E7").Value = "Mehmet Kaya"
+   ws.Range("E8").Value = "Ayşe Demir"
+
+   ws.Range("F6").Value = 120000
+   ws.Range("F7").Value = 210000
+   ws.Range("F8").Value = 76000
+
+   ws.Range("G6").Value = 6
+   ws.Range("G7").Value = 11
+   ws.Range("G8").Value = 4
+
+   ' Grafik 2 oluştur
+   Set co2 = ws.ChartObjects.Add(Left:=ws.Range("A36").Left, _
+                                 Top:=ws.Range("A36").Top, _
+                                 Width:=900, _
+                                 Height:=420)
+
+   co2.Name = "TPL_Grafik2"
+
+   With co2.Chart
+
+       .SetSourceData Source:=ws.Range("E5:G8")
+       .ChartType = xlColumnClustered
+
+       ' 2. seri olan Kalem Sayısı çizgi + ikincil eksen
+       On Error Resume Next
+       .SeriesCollection(2).ChartType = xlLine
+       .SeriesCollection(2).axisGroup = xlSecondary
+       On Error GoTo 0
+
+       .HasTitle = True
+       .chartTitle.Text = "KAYNAK SİSTEM - TALEP EDEN KİŞİ - STATÜ - MALİYET - KALEM SAYISI GRAFİĞİ"
+
+       With .chartTitle
+           .Format.Fill.Visible = msoTrue
+           .Format.Fill.Solid
+           .Format.Fill.ForeColor.RGB = RGB(192, 0, 0)
+           .Format.TextFrame2.TextRange.Font.Bold = msoTrue
+           .Format.TextFrame2.TextRange.Font.Size = 24
+           .Format.TextFrame2.TextRange.Font.Fill.ForeColor.RGB = RGB(255, 255, 255)
+       End With
+
+       .HasLegend = True
+       .Legend.Position = xlLegendPositionBottom
+
+       On Error Resume Next
+       .Legend.Format.TextFrame2.TextRange.Font.Bold = msoTrue
+       .Legend.Format.TextFrame2.TextRange.Font.Size = 14
+       On Error GoTo 0
+
+       ' Sol eksen
+       On Error Resume Next
+       With .Axes(xlValue, xlPrimary)
+           .HasTitle = True
+           .AxisTitle.Text = "TOPLAM TALEP USD"
+           .AxisTitle.Font.Bold = True
+           .AxisTitle.Font.Size = 18
+           .TickLabels.NumberFormat = "[$$-409]#,##0"
+       End With
+
+       ' Sağ eksen
+       With .Axes(xlValue, xlSecondary)
+           .HasTitle = True
+           .AxisTitle.Text = "TOPLAM KALEM SAYISI"
+           .AxisTitle.Font.Bold = True
+           .AxisTitle.Font.Size = 18
+           .TickLabels.NumberFormat = "0"
+       End With
+       On Error GoTo 0
+
+       ' Veri etiketleri
+       For Each s In .SeriesCollection
+           s.HasDataLabels = True
+           s.DataLabels.ShowValue = True
+           On Error Resume Next
+           s.DataLabels.Format.TextFrame2.TextRange.Font.Bold = msoTrue
+           s.DataLabels.Format.TextFrame2.TextRange.Font.Size = 12
+           On Error GoTo 0
+       Next s
+
+   End With
+
+   ' Biçim
+   ws.Columns("A:G").AutoFit
+   ws.Range("A5:C8").Borders.LineStyle = xlContinuous
+   ws.Range("E5:G8").Borders.LineStyle = xlContinuous
+
+   ' Şimdilik görünür kalsın; tasarım kontrolünden sonra gizleyeceğiz
+   ws.Visible = xlSheetVisible
+
+   Application.ScreenUpdating = True
+
+   MsgBox "SEFLIK_SABLON_GRAFIKLER sayfası ve TPL_Grafik1 / TPL_Grafik2 şablon grafikleri oluşturuldu.", vbInformation, "Aşama 1 Tamamlandı"
+
+End Sub
+
+

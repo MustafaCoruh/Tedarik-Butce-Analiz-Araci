@@ -1,0 +1,123 @@
+Option Explicit
+
+Public gTopluCalismaAktif As Boolean
+Public gTopluAnaKlasor As String
+Public gSonButceDurumDosyaYolu As String
+Public gSonTedarikKalemleriDosyaYolu As String
+
+
+
+'=========================================================
+' TÜMÜNÜ ÇALIŞTIR İÇİN ANA ÇIKTI KLASÖRÜ OLUŞTURUR
+'=========================================================
+Public Sub Cikti_TopluBaslat()
+
+    Dim masaustu As String
+    Dim klasorAdi As String
+
+    masaustu = Environ$("USERPROFILE") & "\Desktop"
+
+    klasorAdi = "Tedarik Bütçe Analizi (" & _
+                Format(Now, "dd.mm.yyyy hh.nn") & ")"
+
+    gTopluAnaKlasor = Cikti_MakeUniqueFolder(masaustu & "\" & klasorAdi)
+
+    Cikti_EnsureFolderExists gTopluAnaKlasor
+
+    gSonButceDurumDosyaYolu = ""
+    gSonTedarikKalemleriDosyaYolu = ""
+    gTopluCalismaAktif = True
+
+End Sub
+
+'=========================================================
+' TÜMÜNÜ ÇALIŞTIR MODUNU KAPATIR
+'=========================================================
+Public Sub Cikti_TopluBitir()
+
+    gTopluCalismaAktif = False
+
+End Sub
+
+'=========================================================
+' HER BUTON İÇİN ÇIKTI KLASÖRÜ DÖNDÜRÜR
+'
+' Toplu çalışma aktifse:
+'   Toplu ana klasör altında klasör açar.
+'
+' Toplu çalışma aktif değilse:
+'   Kaynak dosyanın bulunduğu klasörde klasör açar.
+'=========================================================
+Public Function Cikti_KlasoruAl(ByVal islemAdi As String, _
+                                Optional ByVal normalAnaKlasor As String = "") As String
+
+    Dim tarihDamgasi As String
+    Dim hedefKlasor As String
+
+    tarihDamgasi = Format(Date, "dd.mm.yyyy")
+
+    If gTopluCalismaAktif And Len(gTopluAnaKlasor) > 0 Then
+
+        hedefKlasor = gTopluAnaKlasor & "\" & islemAdi & " (" & tarihDamgasi & ")"
+
+    Else
+
+        If Len(normalAnaKlasor) = 0 Then
+            normalAnaKlasor = Environ$("USERPROFILE") & "\Desktop"
+        End If
+
+        hedefKlasor = normalAnaKlasor & "\" & islemAdi & " (" & tarihDamgasi & ")"
+
+    End If
+
+    Cikti_EnsureFolderExists hedefKlasor
+
+    Cikti_KlasoruAl = hedefKlasor
+
+End Function
+
+'=========================================================
+' DOSYA YOLUNDAN KAYNAK KLASÖRÜ BULUR
+'=========================================================
+Public Function Cikti_KaynakKlasoruAl(ByVal dosyaYolu As String) As String
+
+    If InStrRev(dosyaYolu, "\") > 0 Then
+        Cikti_KaynakKlasoruAl = Left$(dosyaYolu, InStrRev(dosyaYolu, "\") - 1)
+    Else
+        Cikti_KaynakKlasoruAl = Environ$("USERPROFILE") & "\Desktop"
+    End If
+
+End Function
+
+'=========================================================
+' KLASÖR YOKSA OLUŞTURUR
+'=========================================================
+Public Sub Cikti_EnsureFolderExists(ByVal folderPath As String)
+
+    If Len(Dir(folderPath, vbDirectory)) = 0 Then
+        MkDir folderPath
+    End If
+
+End Sub
+
+'=========================================================
+' AYNI KLASÖR VARSA (2), (3) DİYE BENZERSİZ KLASÖR ADI VERİR
+'=========================================================
+Public Function Cikti_MakeUniqueFolder(ByVal folderPath As String) As String
+
+    Dim candidate As String
+    Dim i As Long
+
+    candidate = folderPath
+    i = 2
+
+    Do While Len(Dir(candidate, vbDirectory)) > 0
+        candidate = folderPath & " (" & i & ")"
+        i = i + 1
+    Loop
+
+    Cikti_MakeUniqueFolder = candidate
+
+End Function
+
+

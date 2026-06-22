@@ -1,0 +1,718 @@
+Option Explicit
+
+Public Sub FinalButceMakro()
+
+   Dim dosya1 As Workbook, dosya2 As Workbook, yeniWB As Workbook
+   Dim ws1 As Worksheet, ws2 As Worksheet, wsYeni As Worksheet
+   Dim wsIPTS As Worksheet, wsYYS As Worksheet
+   Dim wsKullanilan As Worksheet, wsKullanilmayan As Worksheet
+   Dim wsVeriSeti As Worksheet, wsOnay15Gun As Worksheet
+   Dim ws As Worksheet, wsTemp As Worksheet
+   Dim lo As ListObject
+   Dim secilenDosya1 As String
+   Dim secilenDosya2 As String
+
+
+   Dim i As Long, j As Long, bulunanSatir As Variant
+   Dim sonSatir1 As Long, sonSatir2 As Long
+   Dim copyCount As Long
+   Dim ekleSutun As Long
+   Dim kaynakSutunlari As Variant
+   Dim arananDeger As String
+   Dim masaustuYolu As String, tarihStr As String, kayitYolu As String
+   Dim butceNo As String
+   Dim satirK As Long, satirU As Long
+
+   Dim lastColVS As Long, lastRowVS As Long
+   Dim lastCol As Long, lastRow As Long, iRow As Long
+   Dim satirIPTS As Long, satirYYS As Long, sonSatirYeni As Long
+   Dim dictButce As Object
+   Dim sonSatirYBK As Long, butceNoYBK As String
+   Dim toplamHarcama As Double, toplamTalep As Double
+   Dim satirVS As Long, sonSatirVS As Long
+   Dim sonColYBK As Long, lastRowYBK As Long
+   Dim startCol As Long, endCol As Long, sonSutunTemp As Long
+   Dim sonSutunVeriSeti As Long, satirVeriSeti As Long
+   Dim tarihFarki As Long
+   Dim sonSatirVeriSeti As Long, satirOnay As Long
+   Dim statuText As String, gunDegeri As Variant
+   Dim oldCol As Long, newCol As Long
+   Dim wsVar As Variant
+
+
+   On Error GoTo HataYakala
+
+   Application.ScreenUpdating = False
+   Application.EnableEvents = False
+   Application.Calculation = xlCalculationManual
+
+   kaynakSutunlari = Array(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)
+
+   '====================================================
+   ' 1) DOSYA SEÇİMLERİ
+   '====================================================
+    If gTopluCalismaAktif _
+      And Len(gSonTedarikKalemleriDosyaYolu) > 0 _
+      And Len(Dir(gSonTedarikKalemleriDosyaYolu)) > 0 Then
+    
+       secilenDosya1 = gSonTedarikKalemleriDosyaYolu
+    
+    Else
+    
+       secilenDosya1 = DosyaSec_Excel( _
+                           "Lütfen HUMA üzerinden alınan Tedarik Kalemleri dosyasını seçiniz.", _
+                           "1/2 - Tedarik Kalemleri Dosyasını Seçiniz", _
+                           "Tedarik Kalemleri Dosyasını Seç")
+    
+       If Len(secilenDosya1) = 0 Then GoTo KullaniciIptal
+    
+    End If
+    
+    Set dosya1 = Workbooks.Open(secilenDosya1)
+    Set ws1 = dosya1.Sheets(1)
+
+    
+    secilenDosya2 = DosyaSec_Excel( _
+                        "Lütfen Yatırım Bütçe Kalemleri dosyasını seçiniz.", _
+                        "2/2 - Yatırım Bütçe Kalemleri Dosyasını Seçiniz", _
+                        "Yatırım Bütçe Dosyasını Seç")
+    
+    If Len(secilenDosya2) = 0 Then GoTo KullaniciIptal
+    
+    Set dosya2 = Workbooks.Open(secilenDosya2)
+    Set ws2 = dosya2.Sheets(1)
+
+
+   '====================================================
+   ' 2) YENİ KİTAP VE VERİSETİ SAYFASI
+   '====================================================
+   Set yeniWB = Workbooks.Add
+   Set wsYeni = yeniWB.Sheets(1)
+   wsYeni.Name = "VeriSeti"
+
+   '====================================================
+   ' 3) YENİ SÜTUN DÜZENİNİ ESKİ VERİSETİ DÜZENİNE ÇEVİR
+   '
+   ' Önemli:
+   ' Kaynak Tedarik Kalemleri dosyasında sütunlar değişti.
+   ' Ancak bu makronun sonraki kısımları eski kolon düzenine göre çalışıyor.
+   ' Bu nedenle burada yeni kaynak dosyadan verileri alıp VeriSeti sayfasına
+   ' eski kolon yerleşimine göre yerleştiriyoruz.
+   '
+   ' Örnek:
+   ' Eski Statü = D sütunu / 4. kolon
+   ' Yeni Statü = 5. kolon
+   ' Bu kod yeni 5. kolonu alıp VeriSeti'nde eski D sütununa koyar.
+   '====================================================
+
+'====================================================
+' İlk 2 satır önemsiz olduğu için kaynak veriyi 3. satırdan başlatıyoruz.
+' Kaynak dosyada:
+' 1-2. satırlar yok sayılır
+' 3. satır başlık kabul edilir
+' 4. satır ve sonrası veri kabul edilir
+'====================================================
+
+Dim kaynakBaslikSatiri As Long
+Dim kaynakBitisSatiri As Long
+
+kaynakBaslikSatiri = 3
+
+sonSatir1 = ws1.Cells(ws1.rows.Count, YeniTedarikKolon(1)).End(xlUp).Row
+
+If sonSatir1 < kaynakBaslikSatiri Then
+    MsgBox "Tedarik Kalemleri dosyasında 3. satırdan itibaren veri bulunamadı.", vbCritical, "Eksik Veri"
+    GoTo HataYakala
+End If
+
+copyCount = Application.Min(1500, sonSatir1 - kaynakBaslikSatiri + 1)
+kaynakBitisSatiri = kaynakBaslikSatiri + copyCount - 1
+
+' Eski A:AM aralığını, yeni dosyadaki karşılık gelen sütunlardan oluştur.
+' Kaynakta 3. satırdan başlar, VeriSeti'nde 1. satıra yazar.
+For oldCol = 1 To 39
+    newCol = YeniTedarikKolon(oldCol)
+    ws1.Range(ws1.Cells(kaynakBaslikSatiri, newCol), ws1.Cells(kaynakBitisSatiri, newCol)).Copy wsYeni.Cells(1, oldCol)
+Next oldCol
+
+' Yeni düzende:
+' AN = Huma Son Gözden Geçirme Tarihi
+' AO = Huma Son Açıklama
+
+ws1.Range(ws1.Cells(kaynakBaslikSatiri, 41), ws1.Cells(kaynakBitisSatiri, 41)).Copy wsYeni.Range("AN1")
+ws1.Range(ws1.Cells(kaynakBaslikSatiri, 40), ws1.Cells(kaynakBitisSatiri, 40)).Copy wsYeni.Range("AO1")
+
+ 
+
+   '====================================================
+   ' 4) YATIRIM BÜTÇE DOSYASINDAN ALANLARI VERİSETİNE EKLE
+   '====================================================
+   ekleSutun = wsYeni.Columns("AO").Column + 1
+
+   For j = 0 To UBound(kaynakSutunlari)
+       wsYeni.Cells(1, ekleSutun + j).Value = ws2.Cells(1, kaynakSutunlari(j)).Value
+   Next j
+
+   sonSatir2 = ws2.Cells(ws2.rows.Count, "E").End(xlUp).Row
+
+   For i = 2 To copyCount
+       If Trim(wsYeni.Cells(i, "AM").Value) <> "" Then
+
+           arananDeger = Trim(wsYeni.Cells(i, "AM").Value)
+
+           On Error Resume Next
+           bulunanSatir = Application.Match(arananDeger, ws2.Range("E1:E" & sonSatir2), 0)
+           On Error GoTo HataYakala
+
+           If Not IsError(bulunanSatir) Then
+               For j = 0 To UBound(kaynakSutunlari)
+                   wsYeni.Cells(i, ekleSutun + j).Value = ws2.Cells(bulunanSatir, kaynakSutunlari(j)).Value
+               Next j
+           End If
+
+       End If
+   Next i
+
+   '====================================================
+   ' 5) VERİSETİ FORMATLAMA
+   '====================================================
+   With wsYeni.UsedRange
+       .Borders.LineStyle = xlContinuous
+       .Columns.AutoFit
+   End With
+
+   With wsYeni.Columns("AG")
+       .NumberFormat = "_-[$$-en-US]* #,##0.00_-;_-[$$-en-US]* -#,##0.00_-;_-[$$-en-US]* ""-""??_-;_-@_-"
+   End With
+
+   On Error Resume Next
+   For Each lo In wsYeni.ListObjects
+       lo.Unlist
+   Next lo
+   On Error GoTo HataYakala
+
+   lastRowVS = wsYeni.Cells(wsYeni.rows.Count, "A").End(xlUp).Row
+   lastColVS = wsYeni.Cells(1, wsYeni.Columns.Count).End(xlToLeft).Column
+   wsYeni.ListObjects.Add(xlSrcRange, wsYeni.Range(wsYeni.Cells(1, 1), wsYeni.Cells(lastRowVS, lastColVS)), , xlYes).Name = "Tablo_Veriseti"
+
+   '====================================================
+   ' 6) STATÜ GRUP VE TALEP EDEN BÖLÜM GRUP
+   '====================================================
+   With wsYeni
+
+       lastRow = .Cells(.rows.Count, "A").End(xlUp).Row
+       lastCol = .Cells(1, .Columns.Count).End(xlToLeft).Column
+
+       .Cells(1, lastCol + 1).Value = "Statü Grup"
+       .Cells(1, lastCol + 2).Value = "Talep Eden Bölüm Grup"
+
+       For iRow = 2 To lastRow
+
+           Select Case Trim(.Cells(iRow, "D").Value)
+               Case "HUMA Talebi Reddedildi"
+                   .Cells(iRow, lastCol + 1).Value = "Reddedilen Talepler"
+
+               Case "Teslim Edildi"
+                   .Cells(iRow, lastCol + 1).Value = "Teslim Edilen Talepler"
+
+               Case "Kısmi Teslimat", "Teslimat İçin Vakit Var", "Teslimat Gecikti"
+                   .Cells(iRow, lastCol + 1).Value = "Teslim Edilecek Talepler"
+
+               Case "HUMA Talebi Henüz Onaylanmadı", "PR Kesildi, PO Henüz Kesilmedi", "HUMA Talebi Onaylandı, PR Henüz Kesilmedi"
+                   .Cells(iRow, lastCol + 1).Value = "HUMA Süreci Devam Eden Talepler"
+
+               Case Else
+                   .Cells(iRow, lastCol + 1).Value = ""
+           End Select
+
+           Select Case Trim(.Cells(iRow, "H").Value)
+               Case "0V4600"
+                   .Cells(iRow, lastCol + 2).Value = "V4600"
+
+               Case "0V4620"
+                   .Cells(iRow, lastCol + 2).Value = "V4620"
+
+               Case "0V4630"
+                   .Cells(iRow, lastCol + 2).Value = "V4630"
+
+               Case "0V4610", "0V4640"
+                   .Cells(iRow, lastCol + 2).Value = "V4610-V4640"
+
+               Case Else
+                   .Cells(iRow, lastCol + 2).Value = ""
+           End Select
+
+       Next iRow
+
+       .Columns(lastCol + 1).AutoFit
+       .Columns(lastCol + 2).AutoFit
+
+   End With
+
+   '====================================================
+   ' 7) IPTSHUMA VE YYSHUMA SAYFALARI
+   '====================================================
+   Set wsIPTS = yeniWB.Sheets.Add(After:=wsYeni)
+   wsIPTS.Name = "IPTSHUMA"
+
+   Set wsYYS = yeniWB.Sheets.Add(After:=wsIPTS)
+   wsYYS.Name = "YYSHUMA"
+
+   wsYeni.rows(1).Copy wsIPTS.rows(1)
+   wsYeni.rows(1).Copy wsYYS.rows(1)
+
+   satirIPTS = 2
+   satirYYS = 2
+
+   sonSatirYeni = wsYeni.Cells(wsYeni.rows.Count, "B").End(xlUp).Row
+
+   For i = 2 To sonSatirYeni
+       Select Case Trim(wsYeni.Cells(i, "B").Value)
+           Case "IPTSHUMA"
+               wsYeni.rows(i).Copy wsIPTS.rows(satirIPTS)
+               satirIPTS = satirIPTS + 1
+
+           Case "YYSHUMA"
+               wsYeni.rows(i).Copy wsYYS.rows(satirYYS)
+               satirYYS = satirYYS + 1
+       End Select
+   Next i
+
+   For Each wsVar In Array(wsIPTS, wsYYS)
+        Set ws = wsVar
+
+       With ws.UsedRange
+           .Borders.LineStyle = xlContinuous
+           .Columns.AutoFit
+       End With
+
+       On Error Resume Next
+       For Each lo In ws.ListObjects
+           lo.Unlist
+       Next lo
+       On Error GoTo HataYakala
+
+       ws.ListObjects.Add(xlSrcRange, ws.Range("A1").CurrentRegion, , xlYes).Name = "Tablo_" & TemizTabloAdi(ws.Name)
+
+   Next wsVar
+
+   '====================================================
+   ' 8) YATIRIM BÜTÇESİ KULLANILAN / KULLANILMAYAN
+   '====================================================
+   On Error Resume Next
+   Application.DisplayAlerts = False
+   yeniWB.Sheets("Yatırım Bütçesi Kullanılan").Delete
+   yeniWB.Sheets("Yatırım Bütçesi Kullanılmayan").Delete
+   Application.DisplayAlerts = True
+   On Error GoTo HataYakala
+
+   Set wsKullanilan = yeniWB.Sheets.Add(After:=wsYYS)
+   wsKullanilan.Name = "Yatırım Bütçesi Kullanılan"
+
+   wsYYS.Range("AP1:BH1").Copy wsKullanilan.Range("A1")
+
+   Set dictButce = CreateObject("Scripting.Dictionary")
+   satirK = 2
+
+   For i = 2 To wsYYS.Cells(wsYYS.rows.Count, "AM").End(xlUp).Row
+
+       butceNo = Trim(wsYYS.Cells(i, "AM").Value)
+
+       If Len(butceNo) > 0 And Not dictButce.Exists(butceNo) Then
+           dictButce.Add butceNo, True
+           wsYYS.Range("AP" & i & ":BH" & i).Copy wsKullanilan.Range("A" & satirK)
+           satirK = satirK + 1
+       End If
+
+   Next i
+
+   Set wsKullanilmayan = yeniWB.Sheets.Add(After:=wsKullanilan)
+   wsKullanilmayan.Name = "Yatırım Bütçesi Kullanılmayan"
+
+   ws2.rows(1).Copy wsKullanilmayan.rows(1)
+
+   satirU = 2
+
+   For i = 2 To ws2.Cells(ws2.rows.Count, "E").End(xlUp).Row
+
+       butceNo = Trim(ws2.Cells(i, "E").Value)
+
+       If Len(butceNo) > 0 Then
+           If Not dictButce.Exists(butceNo) Then
+               ws2.rows(i).Copy wsKullanilmayan.rows(satirU)
+               satirU = satirU + 1
+           End If
+       End If
+
+   Next i
+
+   For Each wsVar In Array(wsKullanilan, wsKullanilmayan)
+        Set ws = wsVar
+
+       With ws.UsedRange
+           .Borders.LineStyle = xlContinuous
+           .Columns.AutoFit
+       End With
+
+       On Error Resume Next
+       For Each lo In ws.ListObjects
+           lo.Unlist
+       Next lo
+       On Error GoTo HataYakala
+
+       ws.ListObjects.Add(xlSrcRange, ws.Range("A1").CurrentRegion, , xlYes).Name = "Tablo_" & TemizTabloAdi(ws.Name)
+
+   Next wsVar
+
+   '====================================================
+   ' 9) YATIRIM BÜTÇESİ KULLANILAN T / U HESAPLARI
+   '====================================================
+   Set wsVeriSeti = yeniWB.Sheets("VeriSeti")
+
+   sonSatirYBK = wsKullanilan.Cells(wsKullanilan.rows.Count, "E").End(xlUp).Row
+
+   wsKullanilan.Cells(1, "T").Value = "Hesaplanan Harcama Tutarı USD"
+   wsKullanilan.Cells(1, "U").Value = "Hesaplanan Talep Toplam Tutarı USD"
+
+   sonSatirVS = wsVeriSeti.Cells(wsVeriSeti.rows.Count, "AM").End(xlUp).Row
+
+   For i = 2 To sonSatirYBK
+
+       butceNoYBK = Trim(wsKullanilan.Cells(i, "E").Value)
+       toplamHarcama = 0
+       toplamTalep = 0
+
+       For satirVS = 2 To sonSatirVS
+
+           If Trim(wsVeriSeti.Cells(satirVS, "AM").Value) = butceNoYBK Then
+
+               Select Case Trim(wsVeriSeti.Cells(satirVS, "D").Value)
+
+                   Case "PR Kesildi, PO Henüz Kesilmedi", "Teslim Edildi", "Teslimat Gecikti", "Teslimat İçin Vakit Var"
+                       toplamHarcama = toplamHarcama + CDbl(Val(wsVeriSeti.Cells(satirVS, "AG").Value))
+                       toplamTalep = toplamTalep + CDbl(Val(wsVeriSeti.Cells(satirVS, "AG").Value))
+
+                   Case "HUMA Talebi Henüz Onaylanmadı", "HUMA Talebi Onaylandı, PR Henüz Kesilmedi"
+                       toplamTalep = toplamTalep + CDbl(Val(wsVeriSeti.Cells(satirVS, "AG").Value))
+
+               End Select
+
+           End If
+
+       Next satirVS
+
+       wsKullanilan.Cells(i, "T").Value = toplamHarcama
+       wsKullanilan.Cells(i, "U").Value = toplamTalep
+
+   Next i
+
+   wsKullanilan.Columns("T:U").NumberFormat = "#,##0.00"
+   wsKullanilan.Columns("T:U").AutoFit
+
+   lastRowYBK = wsKullanilan.Cells(wsKullanilan.rows.Count, "A").End(xlUp).Row
+   sonColYBK = wsKullanilan.Cells(1, wsKullanilan.Columns.Count).End(xlToLeft).Column + 1
+
+   wsKullanilan.Cells(1, sonColYBK).Value = "Bütçe No - Proje - Tanım"
+
+   If lastRowYBK >= 2 Then
+       wsKullanilan.Range(wsKullanilan.Cells(2, sonColYBK), wsKullanilan.Cells(lastRowYBK, sonColYBK)).FormulaR1C1 = "=RC5&"" - ""&RC3&"" - ""&RC9"
+   End If
+
+   wsKullanilan.Columns(sonColYBK).AutoFit
+
+   '====================================================
+   ' 10) YYS BAŞLIKLARINA YYS- EKLE
+   '====================================================
+   For Each wsVar In Array(wsYeni, wsIPTS, wsYYS)
+        Set wsTemp = wsVar
+
+       startCol = ekleSutun
+       endCol = ekleSutun + UBound(kaynakSutunlari)
+
+       For j = startCol To endCol
+           If wsTemp.Cells(1, j).Value <> "" And Left(wsTemp.Cells(1, j).Value, 4) <> "YYS-" Then
+               wsTemp.Cells(1, j).Value = "YYS-" & wsTemp.Cells(1, j).Value
+           End If
+       Next j
+
+       wsTemp.Columns.AutoFit
+
+   Next wsVar
+
+   For Each wsVar In Array(wsKullanilan, wsKullanilmayan)
+        Set wsTemp = wsVar
+
+       sonSutunTemp = wsTemp.Cells(1, wsTemp.Columns.Count).End(xlToLeft).Column
+
+       For j = 1 To sonSutunTemp
+           If wsTemp.Cells(1, j).Value <> "" And Left(wsTemp.Cells(1, j).Value, 4) <> "YYS-" Then
+               wsTemp.Cells(1, j).Value = "YYS-" & wsTemp.Cells(1, j).Value
+           End If
+       Next j
+
+       wsTemp.Columns.AutoFit
+
+   Next wsVar
+
+   '====================================================
+   ' 11) SON İŞLEM SONRASI GEÇEN SÜRE
+   '====================================================
+   With wsYeni
+
+       sonSutunVeriSeti = .UsedRange.Columns.Count
+       .Cells(1, sonSutunVeriSeti + 1).Value = "Son İşlem Sonrası Geçen Süre (Gün)"
+
+       For satirVeriSeti = 2 To .Cells(.rows.Count, "A").End(xlUp).Row
+
+           If IsDate(.Cells(satirVeriSeti, "AO").Value) Then
+
+               tarihFarki = DateDiff("d", Int(.Cells(satirVeriSeti, "AO").Value), Date)
+
+               If tarihFarki > 300 Then
+                   .Cells(satirVeriSeti, sonSutunVeriSeti + 1).Value = "Son İşlem Tarihi Değeri Hatalıdır."
+               Else
+                   .Cells(satirVeriSeti, sonSutunVeriSeti + 1).Value = tarihFarki
+               End If
+
+           Else
+               .Cells(satirVeriSeti, sonSutunVeriSeti + 1).Value = "Geçersiz Tarih"
+           End If
+
+       Next satirVeriSeti
+
+       .Columns(sonSutunVeriSeti + 1).AutoFit
+
+   End With
+
+   '====================================================
+   ' 12) ONAYDA 15 GÜN ÜZERİ BEKLEYEN SAYFASI
+   '====================================================
+   On Error Resume Next
+   Application.DisplayAlerts = False
+   yeniWB.Sheets("Onayda 15 Gün Üzeri Bekleyen").Delete
+   Application.DisplayAlerts = True
+   On Error GoTo HataYakala
+
+   Set wsOnay15Gun = yeniWB.Sheets.Add(After:=yeniWB.Sheets(yeniWB.Sheets.Count))
+   wsOnay15Gun.Name = "Onayda 15 Gün Üzeri Bekleyen"
+
+   Set wsYeni = yeniWB.Sheets("VeriSeti")
+   sonSutunVeriSeti = wsYeni.UsedRange.Columns.Count
+   sonSatirVeriSeti = wsYeni.Cells(wsYeni.rows.Count, "A").End(xlUp).Row
+
+   wsYeni.Range(wsYeni.Cells(1, 1), wsYeni.Cells(1, sonSutunVeriSeti)).Copy wsOnay15Gun.Cells(1, 1)
+
+   satirOnay = 2
+
+   For i = 2 To sonSatirVeriSeti
+
+       statuText = Trim(wsYeni.Cells(i, "D").Value)
+       gunDegeri = wsYeni.Cells(i, sonSutunVeriSeti).Value
+
+       If IsNumeric(gunDegeri) Then
+           If gunDegeri > 15 Then
+               If statuText <> "HUMA Talebi Reddedildi" And statuText <> "Teslim Edildi" Then
+                   wsYeni.Range(wsYeni.Cells(i, 1), wsYeni.Cells(i, sonSutunVeriSeti)).Copy wsOnay15Gun.Cells(satirOnay, 1)
+                   satirOnay = satirOnay + 1
+               End If
+           End If
+       End If
+
+   Next i
+
+   If satirOnay > 2 Then
+
+       With wsOnay15Gun.Sort
+
+           .SortFields.Clear
+           .SortFields.Add key:=wsOnay15Gun.Range("D2:D" & satirOnay - 1), _
+                           SortOn:=xlSortOnValues, _
+                           Order:=xlAscending, _
+                           DataOption:=xlSortNormal
+
+           .SetRange wsOnay15Gun.Range(wsOnay15Gun.Cells(1, 1), wsOnay15Gun.Cells(satirOnay - 1, sonSutunVeriSeti))
+           .Header = xlYes
+           .Apply
+
+       End With
+
+   End If
+
+   With wsOnay15Gun.UsedRange
+       .Borders.LineStyle = xlContinuous
+       .Columns.AutoFit
+   End With
+
+   On Error Resume Next
+   For Each lo In wsOnay15Gun.ListObjects
+       lo.Unlist
+   Next lo
+   On Error GoTo HataYakala
+
+   wsOnay15Gun.ListObjects.Add(xlSrcRange, wsOnay15Gun.Range("A1").CurrentRegion, , xlYes).Name = "Tablo_Onay15Gun"
+
+   '====================================================
+   ' 13) KAYDET VE KAPAT
+   '====================================================
+    tarihStr = Format(Date, "dd.mm.yyyy")
+    
+    masaustuYolu = Cikti_KlasoruAl("02 - Bütçe Durum Çalışması", dosya1.Path)
+    
+    kayitYolu = BenzersizDosyaYolu(masaustuYolu & "\Bütçe Durum " & tarihStr & ".xlsx")
+
+
+    yeniWB.SaveAs kayitYolu, FileFormat:=xlOpenXMLWorkbook
+    
+    ' Tümünü Çalıştır akışında müdürlük ve şeflik grafiklerinin
+    ' aynı Bütçe Durum dosyasını otomatik kullanabilmesi için dosya yolunu sakla.
+    gSonButceDurumDosyaYolu = kayitYolu
+    
+    yeniWB.Close SaveChanges:=False
+
+
+   dosya1.Close SaveChanges:=False
+   dosya2.Close SaveChanges:=False
+
+   Application.ScreenUpdating = True
+   Application.EnableEvents = True
+   Application.Calculation = xlCalculationAutomatic
+
+   MsgBox "Bütçe Durum dosyası masaüstüne kaydedildi:" & vbCrLf & vbCrLf & kayitYolu, vbInformation, "İşlem Tamamlandı"
+
+   Exit Sub
+    
+KullaniciIptal:
+
+    Application.ScreenUpdating = True
+    Application.EnableEvents = True
+    Application.Calculation = xlCalculationAutomatic
+
+    On Error Resume Next
+    If Not dosya1 Is Nothing Then dosya1.Close SaveChanges:=False
+    If Not dosya2 Is Nothing Then dosya2.Close SaveChanges:=False
+    If Not yeniWB Is Nothing Then yeniWB.Close SaveChanges:=False
+    On Error GoTo 0
+
+    MsgBox "İşlem kullanıcı tarafından iptal edildi.", vbInformation, "İşlem İptal"
+
+    Exit Sub
+
+    
+    
+HataYakala:
+
+   Application.ScreenUpdating = True
+   Application.EnableEvents = True
+   Application.Calculation = xlCalculationAutomatic
+
+   On Error Resume Next
+   If Not dosya1 Is Nothing Then dosya1.Close SaveChanges:=False
+   If Not dosya2 Is Nothing Then dosya2.Close SaveChanges:=False
+   If Not yeniWB Is Nothing Then yeniWB.Close SaveChanges:=False
+   On Error GoTo 0
+
+   MsgBox "Bütçe Durum makrosunda hata oluştu:" & vbCrLf & Err.Description, vbCritical, "Hata"
+
+End Sub
+
+Public Function YeniTedarikKolon(ByVal eskiKolon As Long) As Long
+
+   Select Case eskiKolon
+
+       Case 1: YeniTedarikKolon = 1      ' Giriş Tarihi
+       Case 2: YeniTedarikKolon = 2      ' Kaynak Sistem
+       Case 3: YeniTedarikKolon = 3      ' Talep No
+       Case 4: YeniTedarikKolon = 5      ' Statü
+       Case 5: YeniTedarikKolon = 6      ' Statü Detay
+       Case 6: YeniTedarikKolon = 7      ' Talep Eden
+       Case 7: YeniTedarikKolon = 8      ' Talep Eden Ad Soyad
+       Case 8: YeniTedarikKolon = 10     ' Talep Eden Bölüm
+       Case 9: YeniTedarikKolon = 9      ' Talep Eden Başkanlık
+       Case 10: YeniTedarikKolon = 11    ' Proje
+       Case 11: YeniTedarikKolon = 12    ' Plant
+       Case 12: YeniTedarikKolon = 13    ' Malzeme No
+       Case 13: YeniTedarikKolon = 14    ' Malzeme TR
+       Case 14: YeniTedarikKolon = 15    ' Tedarik Sorumlusu
+       Case 15: YeniTedarikKolon = 16    ' Tedarik Sorumlusu Ad Soyad
+       Case 16: YeniTedarikKolon = 17    ' Tedarik Sorumlusu Bölüm
+       Case 17: YeniTedarikKolon = 19    ' Hüma Birim Fiyat
+       Case 18: YeniTedarikKolon = 20    ' Hüma Para Birimi
+       Case 19: YeniTedarikKolon = 21    ' Hüma Miktar
+       Case 20: YeniTedarikKolon = 22    ' PR Creation Date
+       Case 21: YeniTedarikKolon = 23    ' PR NO
+       Case 22: YeniTedarikKolon = 24    ' PR Satınalmacı
+       Case 23: YeniTedarikKolon = 25    ' PR Bütçe Tutar TL
+       Case 24: YeniTedarikKolon = 26    ' PR Adet
+       Case 25: YeniTedarikKolon = 27    ' PO Creation Date
+       Case 26: YeniTedarikKolon = 28    ' PONUMBER
+       Case 27: YeniTedarikKolon = 29    ' POITEMNO
+       Case 28: YeniTedarikKolon = 30    ' PO Satınalmacı
+       Case 29: YeniTedarikKolon = 32    ' Delivery Date
+       Case 30: YeniTedarikKolon = 33    ' Max Lead Time
+       Case 31: YeniTedarikKolon = 34    ' Gelen Miktar
+       Case 32: YeniTedarikKolon = 35    ' Actual Delivery Date
+       Case 33: YeniTedarikKolon = 36    ' Talep Toplam USD
+       Case 34: YeniTedarikKolon = 38    ' Tesellüm Tarihi
+       Case 35: YeniTedarikKolon = 39    ' Hüma Envanter Birim
+       Case 36: YeniTedarikKolon = 43    ' İhtiyaç Gerekçesi
+       Case 37: YeniTedarikKolon = 45    ' Teslim Yeri
+       Case 38: YeniTedarikKolon = 44    ' Açıklama
+       Case 39: YeniTedarikKolon = 4     ' Bütçe No
+       Case 40: YeniTedarikKolon = 40    ' Huma Son Gözden Geçirme Tarihi
+       Case 41: YeniTedarikKolon = 41    ' Huma Son Açıklama
+       Case 42: YeniTedarikKolon = 42    ' Huma Son İşlem Sahibi
+
+       Case Else
+           YeniTedarikKolon = eskiKolon
+
+   End Select
+
+End Function
+
+Public Function TemizTabloAdi(ByVal metin As String) As String
+
+   metin = Replace(metin, " ", "_")
+   metin = Replace(metin, "ı", "i")
+   metin = Replace(metin, "İ", "I")
+   metin = Replace(metin, "ğ", "g")
+   metin = Replace(metin, "Ğ", "G")
+   metin = Replace(metin, "ü", "u")
+   metin = Replace(metin, "Ü", "U")
+   metin = Replace(metin, "ş", "s")
+   metin = Replace(metin, "Ş", "S")
+   metin = Replace(metin, "ö", "o")
+   metin = Replace(metin, "Ö", "O")
+   metin = Replace(metin, "ç", "c")
+   metin = Replace(metin, "Ç", "C")
+   metin = Replace(metin, "-", "_")
+
+   TemizTabloAdi = metin
+
+End Function
+
+Public Function BenzersizDosyaYolu(ByVal tamYol As String) As String
+
+   Dim uzantisiz As String
+   Dim uzanti As String
+   Dim i As Long
+   Dim yeniYol As String
+
+   If Dir(tamYol) = "" Then
+       BenzersizDosyaYolu = tamYol
+       Exit Function
+   End If
+
+   uzantisiz = Left(tamYol, InStrRev(tamYol, ".") - 1)
+   uzanti = Mid(tamYol, InStrRev(tamYol, "."))
+
+   i = 1
+   Do
+       yeniYol = uzantisiz & "_" & i & uzanti
+       i = i + 1
+   Loop While Dir(yeniYol) <> ""
+
+   BenzersizDosyaYolu = yeniYol
+
+End Function
+
+

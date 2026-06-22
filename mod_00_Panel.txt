@@ -1,0 +1,91 @@
+Option Explicit
+
+'=========================================================
+' 1. Tedarik Kalemlerini Proje ve Statülere Göre Ayırma
+'=========================================================
+Public Sub Run_Tedarik_Proje_Statu()
+    Call VerileriIsle
+End Sub
+
+'=========================================================
+' 2. Bütçe Durum Çalışması
+'=========================================================
+Public Sub Run_Butce_Durum()
+    Call FinalButceMakro
+End Sub
+
+'=========================================================
+' 3. Müdürlük Bütçe Durum Grafikleri
+'=========================================================
+Public Sub Run_Mudurluk_Butce()
+    Call Main
+End Sub
+
+'=========================================================
+' 4. Şeflik Bütçe Durum Grafikleri
+'=========================================================
+Public Sub Run_Seflik_Butce()
+    Call Rapor_4_Dosya
+End Sub
+
+'=========================================================
+' Hepsini sırayla çalıştırır
+'=========================================================
+Public Sub Run_Tumunu()
+
+    Dim topluKlasor As String
+
+    On Error GoTo EH
+
+    Cikti_TopluBaslat
+    topluKlasor = gTopluAnaKlasor
+
+    Info "Toplu akış başladı..."
+
+    Run_Tedarik_Proje_Statu
+    Run_Butce_Durum
+    Run_Mudurluk_Butce
+    Run_Seflik_Butce
+
+    Info "Toplu akış tamamlandı."
+
+    Cikti_TopluBitir
+
+    MsgBox "Tüm işlemler başarıyla tamamlandı." & vbCrLf & vbCrLf & _
+           "Tüm çıktı dosyaları aşağıdaki ana klasörde toplanmıştır:" & vbCrLf & _
+           topluKlasor, _
+           vbInformation, "Tümünü Çalıştır Tamamlandı"
+
+    Exit Sub
+
+EH:
+
+    Cikti_TopluBitir
+
+    MsgBox "Toplu akışta hata oluştu:" & vbCrLf & _
+           Err.Description, _
+           vbCritical, "Tümünü Çalıştır"
+
+    Info "Hazır."
+
+End Sub
+
+'=========================================================
+' PANEL DURUM BİLGİSİ YAZDIRIR
+'
+' Şimdilik Immediate Window'a yazar.
+' İleride panelde durum hücresi/label kullanırsak buradan bağlarız.
+'=========================================================
+Public Sub Info(ByVal mesaj As String)
+
+   On Error Resume Next
+
+   Debug.Print Format(Now, "dd.mm.yyyy hh:nn:ss") & " | " & mesaj
+
+   On Error GoTo 0
+
+End Sub
+
+
+
+

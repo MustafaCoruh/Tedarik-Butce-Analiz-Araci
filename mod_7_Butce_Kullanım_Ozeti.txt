@@ -1,0 +1,1299 @@
+Option Explicit
+
+Private Const KOKPIT_SILINECEK_UST_SATIR_SAYISI As Long = 2
+
+Public Sub Run_ButceKullanimOzeti()
+
+    ButceKullanimOzeti_Core
+
+End Sub
+
+
+Public Sub Run_ButceKullanimOzeti_FromAll(ByVal pTedarikDosyaYolu As String, _
+                                           ByVal pYatirimButceDosyaYolu As String, _
+                                           ByVal pProjeBilgiDosyaYolu As String, _
+                                           Optional ByVal pCiktiAnaKlasor As String = "")
+
+    ButceKullanimOzeti_Core pTedarikDosyaYolu, _
+                            pYatirimButceDosyaYolu, _
+                            pProjeBilgiDosyaYolu, _
+                            pCiktiAnaKlasor
+
+End Sub
+
+
+Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String = "", _
+                                    Optional ByVal pYatirimButceDosyaYolu As String = "", _
+                                    Optional ByVal pProjeBilgiDosyaYolu As String = "", _
+                                    Optional ByVal pCiktiAnaKlasor As String = "")
+
+
+   Dim wbTedarik As Workbook
+   Dim wbYatirim As Workbook
+   Dim wbYeni As Workbook
+
+   Dim wsTedarik As Worksheet
+   Dim wsYatirim As Worksheet
+   Dim wsVeriSeti As Worksheet
+   Dim wsKullanimOzet As Worksheet
+
+   Dim tedarikDosyaYolu As String
+   Dim yatirimDosyaYolu As String
+   Dim projeBilgiDosyaYolu As String
+
+   Dim tarihMetni As String
+   Dim ciktiKlasoru As String
+   Dim ciktiDosyaYolu As String
+
+   Dim tedarikHeaderRow As Long
+   Dim yeniHeaderRow As Long
+
+   Dim colTedButceNo As Long
+   Dim colTedStatu As Long
+   Dim colTedTutarUSD As Long
+
+   Dim colYeniButceNo As Long
+   Dim colYeniButce As Long
+   Dim colYeniKullanilan As Long
+   Dim colYeniBakiye As Long
+
+   Dim colHesapHarcama As Long
+   Dim colHesapTalep As Long
+
+   Dim sonSatirTed As Long
+   Dim sonSatirYatirim As Long
+   Dim sonSutunYatirim As Long
+   Dim sonSatirYeni As Long
+   Dim sonSutunYeni As Long
+
+   Dim dictHarcama As Object
+   Dim dictTalep As Object
+
+   Dim i As Long
+   Dim butceNo As String
+   Dim statu As String
+   Dim tutarUSD As Double
+
+   Dim eskiEkran As Boolean
+   Dim eskiUyari As Boolean
+
+   On Error GoTo HataYonetimi
+
+   eskiEkran = Application.ScreenUpdating
+   eskiUyari = Application.DisplayAlerts
+
+   Application.ScreenUpdating = False
+   Application.DisplayAlerts = False
+
+   tarihMetni = Format(Date, "dd.mm.yyyy")
+
+   If Len(Trim(pTedarikDosyaYolu)) > 0 Then
+       tedarikDosyaYolu = pTedarikDosyaYolu
+   Else
+       tedarikDosyaYolu = DosyaSec("Lütfen KOKPİT sisteminden alınan Tedarik Kalemleri dosyasını seçiniz.")
+   End If
+
+   If Len(Trim(tedarikDosyaYolu)) = 0 Then GoTo TemizCikis
+
+   If Len(Trim(pYatirimButceDosyaYolu)) > 0 Then
+       yatirimDosyaYolu = pYatirimButceDosyaYolu
+   Else
+       yatirimDosyaYolu = DosyaSec("Lütfen Yatırım Bütçe dosyasını seçiniz.")
+   End If
+   
+    If Len(Trim(pProjeBilgiDosyaYolu)) > 0 Then
+    projeBilgiDosyaYolu = pProjeBilgiDosyaYolu
+    Else
+        projeBilgiDosyaYolu = DosyaSec("Lütfen Proje Kodu ve Proje Adı bilgilerini içeren kaynak dosyayı seçiniz.")
+    End If
+    
+    If Len(Trim(projeBilgiDosyaYolu)) = 0 Then GoTo TemizCikis
+
+
+   If Len(Trim(yatirimDosyaYolu)) = 0 Then GoTo TemizCikis
+
+   If Len(Trim(pCiktiAnaKlasor)) > 0 Then
+       ciktiKlasoru = EnsureBudgetUsageFolder(pCiktiAnaKlasor, tarihMetni)
+   Else
+       ciktiKlasoru = EnsureBudgetUsageFolder(GetParentFolder(tedarikDosyaYolu), tarihMetni)
+   End If
+
+   Set wbTedarik = Workbooks.Open(tedarikDosyaYolu, ReadOnly:=True)
+   Set wbYatirim = Workbooks.Open(yatirimDosyaYolu, ReadOnly:=True)
+
+   Set wsTedarik = wbTedarik.Worksheets(1)
+   Set wsYatirim = wbYatirim.Worksheets(1)
+
+   ' ------------------------------------------------------------
+   ' Tedarik dosyasından eski T/U algoritması için sözlükleri hazırla
+   ' ------------------------------------------------------------
+   tedarikHeaderRow = FindHeaderRow(wsTedarik, Array("Bütçe No", "Butce No"))
+   If tedarikHeaderRow = 0 Then Err.Raise vbObjectError + 1001, , "Tedarik Kalemleri dosyasında 'Bütçe No' başlığı bulunamadı."
+
+   colTedButceNo = FindHeaderCol(wsTedarik, tedarikHeaderRow, Array("Bütçe No", "Butce No", "Bütçe Numarası", "Butce Numarasi"))
+   colTedStatu = FindHeaderCol(wsTedarik, tedarikHeaderRow, Array("Statü", "Statu", "Durum", "Talep Statüsü", "Talep Statusu", "Tedarik Statüsü", "Tedarik Statusu"))
+   colTedTutarUSD = FindHeaderCol(wsTedarik, tedarikHeaderRow, Array( _
+                                   "Talep Toplam USD", _
+                                   "Toplam Talep USD", _
+                                   "Toplam Talep Tutarı USD", _
+                                   "Toplam Talep Tutari USD", _
+                                   "Talep Tutarı USD", _
+                                   "Talep Tutari USD", _
+                                   "ABD $", _
+                                   "USD"))
+
+   If colTedButceNo = 0 Then Err.Raise vbObjectError + 1002, , "Tedarik Kalemleri dosyasında 'Bütçe No' kolonu bulunamadı."
+   If colTedStatu = 0 Then Err.Raise vbObjectError + 1003, , "Tedarik Kalemleri dosyasında 'Statü' kolonu bulunamadı."
+   If colTedTutarUSD = 0 Then Err.Raise vbObjectError + 1004, , "Tedarik Kalemleri dosyasında 'Talep Toplam USD' kolonu bulunamadı."
+
+   Set dictHarcama = CreateObject("Scripting.Dictionary")
+   Set dictTalep = CreateObject("Scripting.Dictionary")
+
+   sonSatirTed = LastUsedRow(wsTedarik)
+
+   For i = tedarikHeaderRow + 1 To sonSatirTed
+
+       butceNo = NormalizeButceNo(wsTedarik.Cells(i, colTedButceNo).Value)
+       statu = CStr(wsTedarik.Cells(i, colTedStatu).Value)
+       tutarUSD = ToDoubleSafe(wsTedarik.Cells(i, colTedTutarUSD).Value)
+
+       If Len(butceNo) > 0 Then
+
+           If IsHarcamaStatus(statu) Then
+               AddToDict dictHarcama, butceNo, tutarUSD
+               AddToDict dictTalep, butceNo, tutarUSD
+
+           ElseIf IsSadeceTalepStatus(statu) Then
+               AddToDict dictTalep, butceNo, tutarUSD
+           End If
+
+       End If
+
+   Next i
+
+   ' ------------------------------------------------------------
+   ' 01 - Yatırım Bütçe Kullanım Durum Özeti dosyası
+   ' ------------------------------------------------------------
+   ciktiDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
+                    "01 - Yatırım Bütçe Kullanım Durum Özeti - " & tarihMetni & ".xlsx"
+
+   Set wbYeni = Workbooks.Add(xlWBATWorksheet)
+
+   Set wsVeriSeti = wbYeni.Worksheets(1)
+   wsVeriSeti.Name = "01 - Veri Seti"
+
+   Set wsKullanimOzet = wbYeni.Worksheets.Add(After:=wsVeriSeti)
+   wsKullanimOzet.Name = "02 - Kullanım Özeti"
+
+   PrepareKokpitVeriSeti wsTedarik, wsVeriSeti, "YYSHUMA"
+
+   sonSatirYatirim = LastUsedRow(wsYatirim)
+   sonSutunYatirim = LastUsedCol(wsYatirim)
+
+   wsYatirim.Range(wsYatirim.Cells(1, 1), wsYatirim.Cells(sonSatirYatirim, sonSutunYatirim)).Copy
+   wsKullanimOzet.Range("A1").PasteSpecial xlPasteAll
+   Application.CutCopyMode = False
+
+   yeniHeaderRow = FindHeaderRow(wsKullanimOzet, Array("Bütçe No", "Butce No"))
+   If yeniHeaderRow = 0 Then Err.Raise vbObjectError + 1005, , "Yatırım Bütçe dosyasında 'Bütçe No' başlığı bulunamadı."
+
+   If yeniHeaderRow = 1 Then
+       wsKullanimOzet.rows(1).Insert Shift:=xlDown
+       yeniHeaderRow = yeniHeaderRow + 1
+   End If
+
+   DeleteColumnsByExactHeaders wsKullanimOzet, yeniHeaderRow, Array( _
+       "Bütçe (TL)", _
+       "Kullanılan(TL)", _
+       "Kullanılan (TL)", _
+       "Bakiye(TL)", _
+       "Bakiye (TL)", _
+       "%(TL)", _
+       "% (TL)", _
+       "Nakit TL", _
+       "Üst Bütçe", _
+       "Ust Butce")
+
+   InsertMudurlukColumn wsKullanimOzet, yeniHeaderRow
+
+   colYeniButceNo = FindHeaderCol(wsKullanimOzet, yeniHeaderRow, Array("Bütçe No", "Butce No", "Bütçe Numarası", "Butce Numarasi"))
+   colYeniButce = FindHeaderCol(wsKullanimOzet, yeniHeaderRow, Array("Bütçe ($)", "Butce ($)", "Bütçe$", "Butce$", "Bütçe", "Butce"))
+   colYeniKullanilan = FindHeaderCol(wsKullanimOzet, yeniHeaderRow, Array("Kullanılan($)", "Kullanilan($)", "Kullanılan ($)", "Kullanilan ($)", "Kullanılan", "Kullanilan"))
+   colYeniBakiye = FindHeaderCol(wsKullanimOzet, yeniHeaderRow, Array("Bakiye($)", "Bakiye ($)", "Bakiye"))
+
+   If colYeniButceNo = 0 Then Err.Raise vbObjectError + 1006, , "Yatırım Bütçe dosyasında 'Bütçe No' kolonu bulunamadı."
+   If colYeniButce = 0 Then Err.Raise vbObjectError + 1007, , "Yatırım Bütçe dosyasında 'Bütçe ($)' kolonu bulunamadı."
+   If colYeniKullanilan = 0 Then Err.Raise vbObjectError + 1008, , "Yatırım Bütçe dosyasında 'Kullanılan($)' kolonu bulunamadı."
+   If colYeniBakiye = 0 Then Err.Raise vbObjectError + 1009, , "Yatırım Bütçe dosyasında 'Bakiye($)' kolonu bulunamadı."
+
+   sonSutunYeni = LastUsedCol(wsKullanimOzet)
+
+   colHesapHarcama = sonSutunYeni + 1
+   colHesapTalep = sonSutunYeni + 2
+
+   wsKullanimOzet.Cells(yeniHeaderRow, colHesapHarcama).Value = "Hesaplanan Harcama Tutarı USD"
+   wsKullanimOzet.Cells(yeniHeaderRow, colHesapTalep).Value = "Hesaplanan Talep Toplam Tutarı USD"
+   wsKullanimOzet.Cells(yeniHeaderRow, colHesapHarcama).Font.Bold = True
+   wsKullanimOzet.Cells(yeniHeaderRow, colHesapTalep).Font.Bold = True
+
+   sonSatirYeni = LastUsedRow(wsKullanimOzet)
+
+   For i = yeniHeaderRow + 1 To sonSatirYeni
+
+       butceNo = NormalizeButceNo(wsKullanimOzet.Cells(i, colYeniButceNo).Value)
+
+       If Len(butceNo) > 0 Then
+
+           If dictHarcama.Exists(butceNo) Then
+               wsKullanimOzet.Cells(i, colHesapHarcama).Value = dictHarcama(butceNo)
+           Else
+               wsKullanimOzet.Cells(i, colHesapHarcama).Value = 0
+           End If
+
+           If dictTalep.Exists(butceNo) Then
+               wsKullanimOzet.Cells(i, colHesapTalep).Value = dictTalep(butceNo)
+           Else
+               wsKullanimOzet.Cells(i, colHesapTalep).Value = 0
+           End If
+
+       End If
+
+   Next i
+
+   wsKullanimOzet.Cells(yeniHeaderRow - 1, colYeniButce).Formula = "=SUM(" & _
+       wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow + 1, colYeniButce), wsKullanimOzet.Cells(sonSatirYeni, colYeniButce)).Address(False, False) & ")"
+
+   wsKullanimOzet.Cells(yeniHeaderRow - 1, colYeniKullanilan).Formula = "=SUM(" & _
+       wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow + 1, colYeniKullanilan), wsKullanimOzet.Cells(sonSatirYeni, colYeniKullanilan)).Address(False, False) & ")"
+
+   wsKullanimOzet.Cells(yeniHeaderRow - 1, colYeniBakiye).Formula = "=SUM(" & _
+       wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow + 1, colYeniBakiye), wsKullanimOzet.Cells(sonSatirYeni, colYeniBakiye)).Address(False, False) & ")"
+
+   wsKullanimOzet.Cells(yeniHeaderRow - 1, colHesapHarcama).Formula = "=SUM(" & _
+       wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow + 1, colHesapHarcama), wsKullanimOzet.Cells(sonSatirYeni, colHesapHarcama)).Address(False, False) & ")"
+
+   wsKullanimOzet.Cells(yeniHeaderRow - 1, colHesapTalep).Formula = "=SUM(" & _
+       wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow + 1, colHesapTalep), wsKullanimOzet.Cells(sonSatirYeni, colHesapTalep)).Address(False, False) & ")"
+
+   wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow - 1, colYeniButce), _
+                        wsKullanimOzet.Cells(yeniHeaderRow - 1, colHesapTalep)).Font.Bold = True
+
+   ApplyNumberFormat wsKullanimOzet, yeniHeaderRow, sonSatirYeni, _
+       Array(colYeniButce, colYeniKullanilan, colYeniBakiye, colHesapHarcama, colHesapTalep)
+
+   wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow, 1), wsKullanimOzet.Cells(yeniHeaderRow, colHesapTalep)).Font.Bold = True
+   wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow, 1), wsKullanimOzet.Cells(sonSatirYeni, colHesapTalep)).Borders.LineStyle = xlContinuous
+
+   If wsKullanimOzet.AutoFilterMode Then wsKullanimOzet.AutoFilterMode = False
+   wsKullanimOzet.Range(wsKullanimOzet.Cells(yeniHeaderRow, 1), wsKullanimOzet.Cells(sonSatirYeni, colHesapTalep)).AutoFilter
+
+   wsKullanimOzet.Columns.AutoFit
+
+    AutoFitAllSheets wbYeni
+   wbYeni.SaveAs Filename:=ciktiDosyaYolu, FileFormat:=xlOpenXMLWorkbook
+   wbYeni.Close SaveChanges:=False
+   Set wbYeni = Nothing
+
+   ' ------------------------------------------------------------
+   ' 02 - İşletme Bütçe Kullanım Durum Özeti dosyası
+   ' ------------------------------------------------------------
+   CreateIsletmeButceKullanimDosyasi wsTedarik, ciktiKlasoru, tarihMetni, projeBilgiDosyaYolu
+
+TemizCikis:
+   On Error Resume Next
+
+   If Not wbYeni Is Nothing Then wbYeni.Close SaveChanges:=False
+   If Not wbTedarik Is Nothing Then wbTedarik.Close SaveChanges:=False
+   If Not wbYatirim Is Nothing Then wbYatirim.Close SaveChanges:=False
+
+   Application.DisplayAlerts = eskiUyari
+   Application.ScreenUpdating = eskiEkran
+
+   If Len(Trim(ciktiKlasoru)) > 0 Then
+       MsgBox "Bütçe Kullanım Durumu dosyaları başarıyla oluşturuldu." & vbCrLf & vbCrLf & _
+              "Kayıt klasörü:" & vbCrLf & ciktiKlasoru, vbInformation, "İşlem Tamamlandı"
+   End If
+
+   Exit Sub
+
+HataYonetimi:
+   On Error Resume Next
+
+   If Not wbYeni Is Nothing Then wbYeni.Close SaveChanges:=False
+   If Not wbTedarik Is Nothing Then wbTedarik.Close SaveChanges:=False
+   If Not wbYatirim Is Nothing Then wbYatirim.Close SaveChanges:=False
+
+   Application.DisplayAlerts = eskiUyari
+   Application.ScreenUpdating = eskiEkran
+
+   MsgBox "İşlem sırasında hata oluştu:" & vbCrLf & vbCrLf & _
+          Err.Description, vbCritical, "Bütçe Kullanım Özeti"
+
+End Sub
+
+Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
+                                               ByVal ciktiKlasoru As String, _
+                                               ByVal tarihMetni As String, _
+                                               ByVal projeBilgiDosyaYolu As String)
+
+
+   Dim wbIsletme As Workbook
+   Dim wsVeriSeti As Worksheet
+   Dim wsGerceklesen As Worksheet
+   Dim wsTalep As Worksheet
+   Dim ciktiDosyaYolu As String
+   Dim wbProjeBilgi As Workbook
+   Dim wsProjeBilgi As Worksheet
+   Dim dictProjeAdi As Object
+
+
+   ciktiDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
+                    "02 - İşletme Bütçe Kullanım Durum Özeti - " & tarihMetni & ".xlsx"
+    Set wbProjeBilgi = Workbooks.Open(projeBilgiDosyaYolu, ReadOnly:=True)
+    Set wsProjeBilgi = wbProjeBilgi.Worksheets(1)
+    Set dictProjeAdi = BuildProjeAdiDict(wsProjeBilgi)
+    
+                
+
+   Set wbIsletme = Workbooks.Add(xlWBATWorksheet)
+
+   Set wsVeriSeti = wbIsletme.Worksheets(1)
+   wsVeriSeti.Name = "01 - Veri Seti"
+
+   Set wsGerceklesen = wbIsletme.Worksheets.Add(After:=wsVeriSeti)
+   wsGerceklesen.Name = "02 - Kullanım Özeti-GERÇEKLEŞEN"
+
+   Set wsTalep = wbIsletme.Worksheets.Add(After:=wsGerceklesen)
+   wsTalep.Name = "03 - Kullanım Özeti-TALEP"
+
+   PrepareKokpitVeriSeti wsTedarik, wsVeriSeti, "IPTSHUMA"
+
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsGerceklesen, False, "Gerçekleşen", dictProjeAdi
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsTalep, True, "Talep", dictProjeAdi
+
+
+   AutoFitAllSheets wbIsletme
+   wbIsletme.SaveAs Filename:=ciktiDosyaYolu, FileFormat:=xlOpenXMLWorkbook
+   wbIsletme.Close SaveChanges:=False
+   If Not wbProjeBilgi Is Nothing Then wbProjeBilgi.Close SaveChanges:=False
+
+End Sub
+
+
+Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
+                                      ByVal wsOzet As Worksheet, _
+                                      ByVal humaStatuleriDahil As Boolean, _
+                                      ByVal baslikTipi As String, _
+                                      ByVal dictProjeAdi As Object)
+
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim i As Long
+
+   Dim colTalepEdenBolum As Long
+   Dim colProje As Long
+   Dim colStatu As Long
+   Dim colGirisTarihi As Long
+   Dim colTalepToplamUSD As Long
+
+   Dim dict As Object
+   Dim key As String
+
+   Dim talepEdenBolum As String
+   Dim temizBirim As String
+   Dim baskanlik As String
+   Dim mudurluk As String
+   Dim birim As String
+   Dim proje As String
+   Dim projeAdi As String
+   Dim statu As String
+   Dim ayNo As Integer
+   Dim tutar As Double
+   Dim toplam As Double
+
+   Dim arr As Variant
+   Dim satir As Long
+   Dim k As Variant
+   Dim m As Long
+   Dim lastOzetRow As Long
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   headerRow = 1
+   lastRow = LastUsedRow(wsVeriSeti)
+
+   colTalepEdenBolum = FindHeaderCol(wsVeriSeti, headerRow, Array("Talep Eden Bölüm", "Talep Eden Bolum"))
+   colProje = FindHeaderCol(wsVeriSeti, headerRow, Array("Proje"))
+   colStatu = FindHeaderCol(wsVeriSeti, headerRow, Array("Statü", "Statu", "Durum", "Talep Statüsü", "Talep Statusu", "Tedarik Statüsü", "Tedarik Statusu"))
+   colGirisTarihi = FindHeaderCol(wsVeriSeti, headerRow, Array("Giriş Tarihi", "Giris Tarihi"))
+   colTalepToplamUSD = FindHeaderCol(wsVeriSeti, headerRow, Array("Talep Toplam USD"))
+
+   If colTalepEdenBolum = 0 Then Err.Raise vbObjectError + 1101, , "'Talep Eden Bölüm' sütunu bulunamadı."
+   If colProje = 0 Then Err.Raise vbObjectError + 1102, , "'Proje' sütunu bulunamadı."
+   If colStatu = 0 Then Err.Raise vbObjectError + 1103, , "'Statü' sütunu bulunamadı."
+   If colGirisTarihi = 0 Then Err.Raise vbObjectError + 1104, , "'Giriş Tarihi' sütunu bulunamadı."
+   If colTalepToplamUSD = 0 Then Err.Raise vbObjectError + 1105, , "'Talep Toplam USD' sütunu bulunamadı."
+
+   For i = headerRow + 1 To lastRow
+
+       statu = CStr(wsVeriSeti.Cells(i, colStatu).Value)
+
+       If IsIsletmeOzetStatus(statu, humaStatuleriDahil) Then
+
+           ayNo = GetMonthNoFromValue(wsVeriSeti.Cells(i, colGirisTarihi).Value)
+
+           If ayNo >= 1 And ayNo <= 12 Then
+
+               talepEdenBolum = CStr(wsVeriSeti.Cells(i, colTalepEdenBolum).Value)
+               temizBirim = CleanTalepEdenBolum(talepEdenBolum)
+
+               If Len(temizBirim) >= 1 Then
+                   baskanlik = Left(temizBirim, 1)
+               Else
+                   baskanlik = ""
+               End If
+
+               If Len(temizBirim) >= 3 Then
+                   mudurluk = Left(temizBirim, 3)
+               Else
+                   mudurluk = temizBirim
+               End If
+
+               birim = temizBirim
+               proje = Trim(CStr(wsVeriSeti.Cells(i, colProje).Value))
+               tutar = ToDoubleSafe(wsVeriSeti.Cells(i, colTalepToplamUSD).Value)
+
+               If Not dictProjeAdi Is Nothing Then
+                   If dictProjeAdi.Exists(NormalizeProjectCode(proje)) Then
+                       projeAdi = dictProjeAdi(NormalizeProjectCode(proje))
+                   Else
+                       projeAdi = ""
+                   End If
+               Else
+                   projeAdi = ""
+               End If
+
+               ' Aynı Birim + Proje tek satır.
+               ' Aynı proje farklı birimdeyse ayrı satır.
+               key = birim & "|" & proje
+
+               If Not dict.Exists(key) Then
+
+                   ReDim arr(1 To 17)
+
+                   arr(1) = baskanlik
+                   arr(2) = mudurluk
+                   arr(3) = birim
+                   arr(4) = proje
+                   arr(5) = projeAdi
+
+                   For m = 6 To 17
+                       arr(m) = 0#
+                   Next m
+
+                   dict.Add key, arr
+
+               End If
+
+               arr = dict(key)
+
+               ' arr(6) = Ocak
+               ' arr(17) = Aralık
+               arr(5 + ayNo) = CDbl(arr(5 + ayNo)) + tutar
+
+               dict(key) = arr
+
+           End If
+
+       End If
+
+   Next i
+
+   wsOzet.Cells.Clear
+
+   ' ------------------------------------------------------------
+   ' Nihai başlık düzeni
+   ' ------------------------------------------------------------
+   wsOzet.Range("A2").Value = "Gider Adı"
+   wsOzet.Range("B2").Value = "Grup"
+   wsOzet.Range("C2").Value = "Müdürlük"
+   wsOzet.Range("D2").Value = "Birim"
+   wsOzet.Range("E2").Value = "Pool"
+   wsOzet.Range("F2").Value = "Proje"
+   wsOzet.Range("G2").Value = "Proje Adı"
+   wsOzet.Range("H2").Value = "Açıklama"
+   wsOzet.Range("I2").Value = "Başkanlık"
+   wsOzet.Range("J2").Value = "Toplam USD Bütçe"
+   wsOzet.Range("K2").Value = baslikTipi & " Toplam USD"
+   wsOzet.Range("L2").Value = "Kalan Bütçe USD"
+
+   wsOzet.Range("M2").Value = "Ocak " & baslikTipi & " USD"
+   wsOzet.Range("N2").Value = "Şubat " & baslikTipi & " USD"
+   wsOzet.Range("O2").Value = "Mart " & baslikTipi & " USD"
+   wsOzet.Range("P2").Value = "Nisan " & baslikTipi & " USD"
+   wsOzet.Range("Q2").Value = "Mayıs " & baslikTipi & " USD"
+   wsOzet.Range("R2").Value = "Haziran " & baslikTipi & " USD"
+   wsOzet.Range("S2").Value = "Temmuz " & baslikTipi & " USD"
+   wsOzet.Range("T2").Value = "Ağustos " & baslikTipi & " USD"
+   wsOzet.Range("U2").Value = "Eylül " & baslikTipi & " USD"
+   wsOzet.Range("V2").Value = "Ekim " & baslikTipi & " USD"
+   wsOzet.Range("W2").Value = "Kasım " & baslikTipi & " USD"
+   wsOzet.Range("X2").Value = "Aralık " & baslikTipi & " USD"
+
+   wsOzet.Range("A2:X2").Font.Bold = True
+
+   satir = 3
+
+   For Each k In dict.Keys
+
+       arr = dict(k)
+
+       wsOzet.Cells(satir, "A").Value = ""
+       wsOzet.Cells(satir, "B").Value = ""
+       wsOzet.Cells(satir, "C").Value = arr(2) ' Müdürlük
+       wsOzet.Cells(satir, "D").Value = arr(3) ' Birim
+       wsOzet.Cells(satir, "E").Value = ""
+       wsOzet.Cells(satir, "F").Value = arr(4) ' Proje
+       wsOzet.Cells(satir, "G").Value = arr(5) ' Proje Adı
+       wsOzet.Cells(satir, "H").Value = ""
+       wsOzet.Cells(satir, "I").Value = arr(1) ' Başkanlık
+       wsOzet.Cells(satir, "J").Value = ""
+
+       toplam = 0#
+
+       For m = 1 To 12
+
+           ' M = Ocak, X = Aralık
+           wsOzet.Cells(satir, 12 + m).Value = arr(5 + m)
+           toplam = toplam + CDbl(arr(5 + m))
+
+       Next m
+
+       ' K = tüm ayların toplamı
+       wsOzet.Cells(satir, "K").Value = toplam
+
+       ' L = J - K
+       wsOzet.Cells(satir, "L").Formula = "=J" & satir & "-K" & satir
+
+       satir = satir + 1
+
+   Next k
+
+   lastOzetRow = satir - 1
+
+   If lastOzetRow >= 3 Then
+
+       ' İlk satır toplamları
+       wsOzet.Range("J1").Formula = "=SUM(J3:J" & lastOzetRow & ")"
+       wsOzet.Range("K1").Formula = "=SUM(K3:K" & lastOzetRow & ")"
+       wsOzet.Range("L1").Formula = "=J1-K1"
+
+       wsOzet.Range("M1").Formula = "=SUM(M3:M" & lastOzetRow & ")"
+       wsOzet.Range("N1").Formula = "=SUM(N3:N" & lastOzetRow & ")"
+       wsOzet.Range("O1").Formula = "=SUM(O3:O" & lastOzetRow & ")"
+       wsOzet.Range("P1").Formula = "=SUM(P3:P" & lastOzetRow & ")"
+       wsOzet.Range("Q1").Formula = "=SUM(Q3:Q" & lastOzetRow & ")"
+       wsOzet.Range("R1").Formula = "=SUM(R3:R" & lastOzetRow & ")"
+       wsOzet.Range("S1").Formula = "=SUM(S3:S" & lastOzetRow & ")"
+       wsOzet.Range("T1").Formula = "=SUM(T3:T" & lastOzetRow & ")"
+       wsOzet.Range("U1").Formula = "=SUM(U3:U" & lastOzetRow & ")"
+       wsOzet.Range("V1").Formula = "=SUM(V3:V" & lastOzetRow & ")"
+       wsOzet.Range("W1").Formula = "=SUM(W3:W" & lastOzetRow & ")"
+       wsOzet.Range("X1").Formula = "=SUM(X3:X" & lastOzetRow & ")"
+
+       wsOzet.Range("J1:X1").Font.Bold = True
+
+       ' Müdürlük / Birim / Proje bazında sıralama
+       With wsOzet.Sort
+           .SortFields.Clear
+           .SortFields.Add key:=wsOzet.Range("C3:C" & lastOzetRow), Order:=xlAscending
+           .SortFields.Add key:=wsOzet.Range("D3:D" & lastOzetRow), Order:=xlAscending
+           .SortFields.Add key:=wsOzet.Range("F3:F" & lastOzetRow), Order:=xlAscending
+           .SetRange wsOzet.Range("A2:X" & lastOzetRow)
+           .Header = xlYes
+           .Apply
+       End With
+
+   Else
+
+       wsOzet.Range("J1").Value = 0
+       wsOzet.Range("K1").Value = 0
+       wsOzet.Range("L1").Formula = "=J1-K1"
+       wsOzet.Range("M1:X1").Value = 0
+       wsOzet.Range("J1:X1").Font.Bold = True
+
+   End If
+
+   ' Finansal format:
+   ' J, K, L ve M-X finansal alanlar.
+   wsOzet.Range("J1:X" & Application.Max(lastOzetRow, 3)).NumberFormat = "#,##0.00 ""USD"""
+
+   wsOzet.Range("A2:X" & Application.Max(lastOzetRow, 2)).Borders.LineStyle = xlContinuous
+   wsOzet.Columns("A:X").AutoFit
+
+   If wsOzet.AutoFilterMode Then wsOzet.AutoFilterMode = False
+   wsOzet.Range("A2:X" & Application.Max(lastOzetRow, 2)).AutoFilter
+
+End Sub
+
+
+
+
+
+Private Sub PrepareKokpitVeriSeti(ByVal wsKaynak As Worksheet, _
+                                 ByVal wsHedef As Worksheet, _
+                                 Optional ByVal kaynakSistemFiltresi As String = "")
+
+
+   Dim sonSatir As Long
+   Dim sonSutun As Long
+   Dim sonSatirHedef As Long
+   Dim sonSutunHedef As Long
+
+   wsHedef.Cells.Clear
+
+   sonSatir = LastUsedRow(wsKaynak)
+   sonSutun = LastUsedCol(wsKaynak)
+
+   wsKaynak.Range(wsKaynak.Cells(1, 1), wsKaynak.Cells(sonSatir, sonSutun)).Copy
+   wsHedef.Range("A1").PasteSpecial xlPasteAll
+   Application.CutCopyMode = False
+
+   If LastUsedRow(wsHedef) >= KOKPIT_SILINECEK_UST_SATIR_SAYISI Then
+       wsHedef.rows("1:" & KOKPIT_SILINECEK_UST_SATIR_SAYISI).Delete
+   End If
+   If Len(Trim(kaynakSistemFiltresi)) > 0 Then
+   KeepOnlyKaynakSistemInVeriSeti wsHedef, kaynakSistemFiltresi
+End If
+
+
+   sonSatirHedef = LastUsedRow(wsHedef)
+   sonSutunHedef = LastUsedCol(wsHedef)
+
+   If sonSatirHedef > 1 Then
+
+       With wsHedef.Sort
+           .SortFields.Clear
+           .SortFields.Add key:=wsHedef.Range("A2:A" & sonSatirHedef), _
+                           SortOn:=xlSortOnValues, _
+                           Order:=xlAscending, _
+                           DataOption:=xlSortNormal
+
+           .SetRange wsHedef.Range(wsHedef.Cells(1, 1), wsHedef.Cells(sonSatirHedef, sonSutunHedef))
+           .Header = xlYes
+           .MatchCase = False
+           .Orientation = xlTopToBottom
+           .Apply
+       End With
+
+   End If
+
+   wsHedef.Columns.AutoFit
+
+End Sub
+
+Private Sub DeleteColumnsByExactHeaders(ByVal ws As Worksheet, ByVal headerRow As Long, ByVal headersToDelete As Variant)
+
+   Dim lastCol As Long
+   Dim c As Long
+   Dim h As Variant
+   Dim cellText As String
+   Dim targetText As String
+   Dim shouldDelete As Boolean
+
+   lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
+
+   For c = lastCol To 1 Step -1
+
+       cellText = NormalizeText(ws.Cells(headerRow, c).Value)
+       shouldDelete = False
+
+       For Each h In headersToDelete
+           targetText = NormalizeText(CStr(h))
+
+           If cellText = targetText Then
+               shouldDelete = True
+               Exit For
+           End If
+       Next h
+
+       If shouldDelete Then
+           ws.Columns(c).Delete
+       End If
+
+   Next c
+
+End Sub
+
+Private Sub InsertMudurlukColumn(ByVal ws As Worksheet, ByVal headerRow As Long)
+
+   Dim colBolum As Long
+   Dim colMudurluk As Long
+   Dim lastRow As Long
+   Dim i As Long
+   Dim bolumDegeri As String
+
+   colBolum = FindHeaderCol(ws, headerRow, Array("Bölüm", "Bolum"))
+
+   If colBolum = 0 Then
+       Err.Raise vbObjectError + 1020, , "Yatırım Bütçe dosyasında 'Bölüm' başlığı bulunamadı. Müdürlük sütunu oluşturulamadı."
+   End If
+
+   ws.Columns(colBolum).Insert Shift:=xlToRight
+
+   colMudurluk = colBolum
+   colBolum = colBolum + 1
+
+   ws.Cells(headerRow, colMudurluk).Value = "Müdürlük"
+   ws.Cells(headerRow, colMudurluk).Font.Bold = True
+
+   lastRow = LastUsedRow(ws)
+
+   For i = headerRow + 1 To lastRow
+
+       bolumDegeri = Trim(CStr(ws.Cells(i, colBolum).Value))
+
+       If Len(bolumDegeri) >= 3 Then
+           ws.Cells(i, colMudurluk).Value = Left(bolumDegeri, 3)
+       Else
+           ws.Cells(i, colMudurluk).Value = bolumDegeri
+       End If
+
+   Next i
+
+End Sub
+
+Private Function IsHarcamaStatus(ByVal statu As String) As Boolean
+
+   Dim s As String
+   s = NormalizeText(statu)
+
+   If InStr(1, s, "PR KESILDI", vbTextCompare) > 0 And _
+      InStr(1, s, "PO HENUZ KESILMEDI", vbTextCompare) > 0 Then
+       IsHarcamaStatus = True
+       Exit Function
+   End If
+
+   If InStr(1, s, "TESLIM EDILDI", vbTextCompare) > 0 Then
+       IsHarcamaStatus = True
+       Exit Function
+   End If
+
+   If InStr(1, s, "TESLIMAT GECIKTI", vbTextCompare) > 0 Then
+       IsHarcamaStatus = True
+       Exit Function
+   End If
+
+   If InStr(1, s, "TESLIMAT ICIN VAKIT VAR", vbTextCompare) > 0 Then
+       IsHarcamaStatus = True
+       Exit Function
+   End If
+
+   If InStr(1, s, "KISMI TESLIMAT", vbTextCompare) > 0 Then
+       IsHarcamaStatus = True
+       Exit Function
+   End If
+
+   IsHarcamaStatus = False
+
+End Function
+
+Private Function IsSadeceTalepStatus(ByVal statu As String) As Boolean
+
+   Dim s As String
+   s = NormalizeText(statu)
+
+   If InStr(1, s, "HUMA TALEBI HENUZ ONAYLANMADI", vbTextCompare) > 0 Then
+       IsSadeceTalepStatus = True
+       Exit Function
+   End If
+
+   If InStr(1, s, "HUMA TALEBI ONAYLANDI", vbTextCompare) > 0 And _
+      InStr(1, s, "PR HENUZ KESILMEDI", vbTextCompare) > 0 Then
+       IsSadeceTalepStatus = True
+       Exit Function
+   End If
+
+   IsSadeceTalepStatus = False
+
+End Function
+
+Private Function IsIsletmeOzetStatus(ByVal statu As String, ByVal humaStatuleriDahil As Boolean) As Boolean
+
+   If IsHarcamaStatus(statu) Then
+       IsIsletmeOzetStatus = True
+       Exit Function
+   End If
+
+   If humaStatuleriDahil Then
+       If IsSadeceTalepStatus(statu) Then
+           IsIsletmeOzetStatus = True
+           Exit Function
+       End If
+   End If
+
+   IsIsletmeOzetStatus = False
+
+End Function
+
+Private Function CleanTalepEdenBolum(ByVal valueIn As Variant) As String
+
+   Dim s As String
+
+   s = Trim(CStr(valueIn))
+
+   Do While Len(s) > 0 And Left(s, 1) = "0"
+       s = Mid(s, 2)
+   Loop
+
+   CleanTalepEdenBolum = s
+
+End Function
+
+Private Function GetMonthNoFromValue(ByVal valueIn As Variant) As Integer
+
+   Dim s As String
+   Dim parts As Variant
+
+   On Error GoTo Hata
+
+   If IsDate(valueIn) Then
+       GetMonthNoFromValue = Month(CDate(valueIn))
+       Exit Function
+   End If
+
+   s = Trim(CStr(valueIn))
+
+   If Len(s) = 0 Then
+       GetMonthNoFromValue = 0
+       Exit Function
+   End If
+
+   If InStr(1, s, ".", vbTextCompare) > 0 Then
+
+       parts = Split(s, ".")
+
+       If UBound(parts) >= 2 Then
+           GetMonthNoFromValue = CInt(parts(1))
+           Exit Function
+       End If
+
+   End If
+
+   If InStr(1, s, "-", vbTextCompare) > 0 Then
+
+       parts = Split(s, "-")
+
+       If UBound(parts) >= 2 Then
+           GetMonthNoFromValue = CInt(parts(1))
+           Exit Function
+       End If
+
+   End If
+
+Hata:
+   GetMonthNoFromValue = 0
+
+End Function
+
+Private Sub AddToDict(ByVal dict As Object, ByVal key As String, ByVal valueToAdd As Double)
+
+   If dict.Exists(key) Then
+       dict(key) = CDbl(dict(key)) + valueToAdd
+   Else
+       dict.Add key, valueToAdd
+   End If
+
+End Sub
+
+Private Function DosyaSec(ByVal mesaj As String) As String
+
+   Dim fd As FileDialog
+
+   Set fd = Application.FileDialog(msoFileDialogFilePicker)
+
+   With fd
+       .Title = mesaj
+       .AllowMultiSelect = False
+       .filters.Clear
+       .filters.Add "Excel Dosyaları", "*.xlsx; *.xlsm; *.xls"
+
+       If .Show = -1 Then
+           DosyaSec = .SelectedItems(1)
+       Else
+           DosyaSec = ""
+       End If
+   End With
+
+End Function
+
+Private Function GetParentFolder(ByVal filePath As String) As String
+
+   GetParentFolder = Left(filePath, InStrRev(filePath, Application.PathSeparator) - 1)
+
+End Function
+
+Private Function EnsureBudgetUsageFolder(ByVal baseFolder As String, ByVal tarihMetni As String) As String
+
+   Dim folderName As String
+   Dim normalizedBaseName As String
+   Dim baseName As String
+   Dim p As Long
+
+   folderName = "Bütçe Kullanım Durumu " & tarihMetni
+   baseFolder = Trim(baseFolder)
+
+   If Right(baseFolder, 1) = Application.PathSeparator Then
+       baseFolder = Left(baseFolder, Len(baseFolder) - 1)
+   End If
+
+   p = InStrRev(baseFolder, Application.PathSeparator)
+
+   If p > 0 Then
+       baseName = Mid(baseFolder, p + 1)
+   Else
+       baseName = baseFolder
+   End If
+
+   normalizedBaseName = NormalizeText(baseName)
+
+   If normalizedBaseName = NormalizeText(folderName) Then
+       EnsureBudgetUsageFolder = baseFolder
+   Else
+       EnsureBudgetUsageFolder = baseFolder & Application.PathSeparator & folderName
+   End If
+
+   If Dir(EnsureBudgetUsageFolder, vbDirectory) = "" Then
+       MkDir EnsureBudgetUsageFolder
+   End If
+
+End Function
+
+Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal possibleHeaders As Variant) As Long
+
+   Dim r As Long
+   Dim c As Long
+   Dim lastCol As Long
+   Dim h As Variant
+   Dim cellText As String
+
+   For r = 1 To 15
+
+       lastCol = ws.Cells(r, ws.Columns.Count).End(xlToLeft).Column
+
+       For c = 1 To lastCol
+
+           cellText = NormalizeText(ws.Cells(r, c).Value)
+
+           For Each h In possibleHeaders
+               If cellText = NormalizeText(CStr(h)) Then
+                   FindHeaderRow = r
+                   Exit Function
+               End If
+           Next h
+
+       Next c
+
+   Next r
+
+   FindHeaderRow = 0
+
+End Function
+
+Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerRow As Long, ByVal possibleHeaders As Variant) As Long
+
+   Dim c As Long
+   Dim lastCol As Long
+   Dim h As Variant
+   Dim cellText As String
+   Dim targetText As String
+
+   lastCol = ws.Cells(headerRow, ws.Columns.Count).End(xlToLeft).Column
+
+   For c = 1 To lastCol
+
+       cellText = NormalizeText(ws.Cells(headerRow, c).Value)
+
+       For Each h In possibleHeaders
+           targetText = NormalizeText(CStr(h))
+
+           If cellText = targetText Then
+               FindHeaderCol = c
+               Exit Function
+           End If
+       Next h
+
+   Next c
+
+   For c = 1 To lastCol
+
+       cellText = NormalizeText(ws.Cells(headerRow, c).Value)
+
+       For Each h In possibleHeaders
+           targetText = NormalizeText(CStr(h))
+
+           If Len(targetText) > 2 Then
+               If InStr(1, cellText, targetText, vbTextCompare) > 0 Then
+                   FindHeaderCol = c
+                   Exit Function
+               End If
+           End If
+       Next h
+
+   Next c
+
+   FindHeaderCol = 0
+
+End Function
+
+Private Function LastUsedRow(ByVal ws As Worksheet) As Long
+
+   Dim f As Range
+
+   Set f = ws.Cells.Find(What:="*", _
+                         After:=ws.Range("A1"), _
+                         LookIn:=xlFormulas, _
+                         LookAt:=xlPart, _
+                         SearchOrder:=xlByRows, _
+                         SearchDirection:=xlPrevious, _
+                         MatchCase:=False)
+
+   If f Is Nothing Then
+       LastUsedRow = 1
+   Else
+       LastUsedRow = f.Row
+   End If
+
+End Function
+
+Private Function LastUsedCol(ByVal ws As Worksheet) As Long
+
+   Dim f As Range
+
+   Set f = ws.Cells.Find(What:="*", _
+                         After:=ws.Range("A1"), _
+                         LookIn:=xlFormulas, _
+                         LookAt:=xlPart, _
+                         SearchOrder:=xlByColumns, _
+                         SearchDirection:=xlPrevious, _
+                         MatchCase:=False)
+
+   If f Is Nothing Then
+       LastUsedCol = 1
+   Else
+       LastUsedCol = f.Column
+   End If
+
+End Function
+
+Private Function NormalizeButceNo(ByVal valueIn As Variant) As String
+
+   NormalizeButceNo = Trim(CStr(valueIn))
+
+End Function
+
+Private Function NormalizeText(ByVal valueIn As Variant) As String
+
+   Dim s As String
+
+   If IsError(valueIn) Then
+       NormalizeText = ""
+       Exit Function
+   End If
+
+   s = CStr(valueIn)
+
+   s = Replace(s, Chr(10), " ")
+   s = Replace(s, Chr(13), " ")
+   s = Replace(s, vbTab, " ")
+
+   s = Trim(s)
+
+   Do While InStr(s, "  ") > 0
+       s = Replace(s, "  ", " ")
+   Loop
+
+   s = UCase$(s)
+
+   s = Replace(s, "İ", "I")
+   s = Replace(s, "İ", "I")
+   s = Replace(s, "Ş", "S")
+   s = Replace(s, "Ğ", "G")
+   s = Replace(s, "Ü", "U")
+   s = Replace(s, "Ö", "O")
+   s = Replace(s, "Ç", "C")
+   s = Replace(s, "ı", "I")
+   s = Replace(s, "ş", "S")
+   s = Replace(s, "ğ", "G")
+   s = Replace(s, "ü", "U")
+   s = Replace(s, "ö", "O")
+   s = Replace(s, "ç", "C")
+
+   NormalizeText = s
+
+End Function
+
+Private Function ToDoubleSafe(ByVal valueIn As Variant) As Double
+
+   Dim s As String
+   Dim lastComma As Long
+   Dim lastDot As Long
+   Dim negativeValue As Boolean
+
+   If IsError(valueIn) Then
+       ToDoubleSafe = 0
+       Exit Function
+   End If
+
+   If IsNumeric(valueIn) Then
+       ToDoubleSafe = CDbl(valueIn)
+       Exit Function
+   End If
+
+   s = Trim(CStr(valueIn))
+
+   If Len(s) = 0 Then
+       ToDoubleSafe = 0
+       Exit Function
+   End If
+
+   If Left(s, 1) = "(" And Right(s, 1) = ")" Then
+       negativeValue = True
+       s = Mid(s, 2, Len(s) - 2)
+   End If
+
+   s = Replace(s, "USD", "", , , vbTextCompare)
+   s = Replace(s, "ABD", "", , , vbTextCompare)
+   s = Replace(s, "$", "")
+   s = Replace(s, " ", "")
+
+   lastComma = InStrRev(s, ",")
+   lastDot = InStrRev(s, ".")
+
+   If lastComma > 0 And lastDot > 0 Then
+
+       If lastComma > lastDot Then
+           s = Replace(s, ".", "")
+           s = Replace(s, ",", ".")
+       Else
+           s = Replace(s, ",", "")
+       End If
+
+   ElseIf lastComma > 0 Then
+
+       s = Replace(s, ".", "")
+       s = Replace(s, ",", ".")
+
+   Else
+
+       s = Replace(s, ",", "")
+
+   End If
+
+   If IsNumeric(s) Then
+       ToDoubleSafe = CDbl(s)
+       If negativeValue Then ToDoubleSafe = -ToDoubleSafe
+   Else
+       ToDoubleSafe = 0
+   End If
+
+End Function
+
+Private Sub ApplyNumberFormat(ByVal ws As Worksheet, ByVal headerRow As Long, ByVal lastRow As Long, ByVal cols As Variant)
+
+   Dim i As Long
+   Dim c As Long
+
+   For i = LBound(cols) To UBound(cols)
+       c = CLng(cols(i))
+       ws.Range(ws.Cells(headerRow - 1, c), ws.Cells(lastRow, c)).NumberFormat = "#,##0.00 ""USD"""
+   Next i
+
+End Sub
+
+
+Private Function BuildProjeAdiDict(ByVal wsProjeBilgi As Worksheet) As Object
+
+    Dim dict As Object
+    Dim lastRow As Long
+    Dim i As Long
+    Dim projeKodu As String
+    Dim projeAdi As String
+    
+    Set dict = CreateObject("Scripting.Dictionary")
+    
+    lastRow = LastUsedRow(wsProjeBilgi)
+    
+    ' Kaynak dosyada:
+    ' B sütunu = Proje Kodu
+    ' D sütunu = Proje Adı
+    For i = 2 To lastRow
+        
+        projeKodu = NormalizeProjectCode(wsProjeBilgi.Cells(i, "B").Value)
+        projeAdi = Trim(CStr(wsProjeBilgi.Cells(i, "D").Value))
+        
+        If Len(projeKodu) > 0 Then
+            If Not dict.Exists(projeKodu) Then
+                dict.Add projeKodu, projeAdi
+            Else
+                If Len(Trim(CStr(dict(projeKodu)))) = 0 And Len(projeAdi) > 0 Then
+                    dict(projeKodu) = projeAdi
+                End If
+            End If
+        End If
+        
+    Next i
+    
+    Set BuildProjeAdiDict = dict
+
+End Function
+
+Private Function NormalizeProjectCode(ByVal valueIn As Variant) As String
+
+    NormalizeProjectCode = Trim(CStr(valueIn))
+
+End Function
+
+Private Sub KeepOnlyKaynakSistemInVeriSeti(ByVal ws As Worksheet, ByVal hedefKaynakSistem As String)
+
+   Dim headerRow As Long
+   Dim colKaynakSistem As Long
+   Dim lastRow As Long
+   Dim i As Long
+   Dim deger As String
+   Dim hedef As String
+
+   headerRow = 1
+
+   colKaynakSistem = FindHeaderCol(ws, headerRow, Array("Kaynak Sistem"))
+
+   If colKaynakSistem = 0 Then
+       Err.Raise vbObjectError + 1201, , "'Kaynak Sistem' sütunu bulunamadı. Veri Seti filtreleme işlemi uygulanamadı."
+   End If
+
+   hedef = NormalizeText(hedefKaynakSistem)
+   lastRow = LastUsedRow(ws)
+
+   For i = lastRow To headerRow + 1 Step -1
+
+       deger = NormalizeText(ws.Cells(i, colKaynakSistem).Value)
+
+       If deger <> hedef Then
+           ws.rows(i).Delete
+       End If
+
+   Next i
+
+End Sub
+
+Private Sub AutoFitAllSheets(ByVal wb As Workbook)
+
+   Dim ws As Worksheet
+
+   For Each ws In wb.Worksheets
+       ws.Cells.EntireColumn.AutoFit
+       ws.Cells.EntireRow.AutoFit
+   Next ws
+
+End Sub
+
