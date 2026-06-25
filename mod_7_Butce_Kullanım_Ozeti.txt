@@ -1229,8 +1229,8 @@ Private Function BuildProjeAdiDict(ByVal wsProjeBilgi As Worksheet) As Object
     ' D sütunu = Proje Adı
     For i = 2 To lastRow
         
-        projeKodu = NormalizeProjectCode(wsProjeBilgi.Cells(i, "B").Value)
-        projeAdi = Trim(CStr(wsProjeBilgi.Cells(i, "D").Value))
+        projeKodu = NormalizeProjectCode(wsProjeBilgi.Cells(i, "A").Value)
+        projeAdi = Trim(CStr(wsProjeBilgi.Cells(i, "G").Value))
         
         If Len(projeKodu) > 0 Then
             If Not dict.Exists(projeKodu) Then
