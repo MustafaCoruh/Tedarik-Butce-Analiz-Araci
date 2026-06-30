@@ -758,12 +758,12 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    If headerRowButce = 0 Then Err.Raise vbObjectError + 1301, , "Bütçe Talepleri dosyasında 'Grup' başlığı bulunamadı."
 
    colGrup = FindHeaderCol(wsButceTalepleri, headerRowButce, Array("Grup"))
-   colDeptNo = FindHeaderCol(wsButceTalepleri, headerRowButce, Array("Dept. No", "Dept No", "Müdürlük", "Mudurluk"))
-   colButceProje = FindHeaderCol(wsButceTalepleri, headerRowButce, Array("Proje"))
+   colDeptNo = FindHeaderCol(wsButceTalepleri, headerRowButce, Array("Dept. No", "Dept.No", "Dept No", "Müdürlük", "Mudurluk"))
+   colButceProje = FindHeaderCol(wsButceTalepleri, headerRowButce, Array("Proje", "Proje Kodu", "Proje Kod"))
 
    If colGrup = 0 Then Err.Raise vbObjectError + 1302, , "Bütçe Talepleri dosyasında 'Grup' sütunu bulunamadı."
-   If colDeptNo = 0 Then Err.Raise vbObjectError + 1303, , "Bütçe Talepleri dosyasında 'Dept. No' sütunu bulunamadı."
-   If colButceProje = 0 Then Err.Raise vbObjectError + 1304, , "Bütçe Talepleri dosyasında 'Proje' sütunu bulunamadı."
+   If colDeptNo = 0 Then Err.Raise vbObjectError + 1303, , "Bütçe Talepleri dosyasında 'Dept. No / Dept.No / Dept No' sütunu bulunamadı."
+   If colButceProje = 0 Then Err.Raise vbObjectError + 1304, , "Bütçe Talepleri dosyasında 'Proje / Proje Kodu' sütunu bulunamadı."
 
    lastRowButce = LastUsedRow(wsButceTalepleri)
 
