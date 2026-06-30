@@ -80,6 +80,7 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
 
    Dim eskiEkran As Boolean
    Dim eskiUyari As Boolean
+   Dim hataMesaji As String
 
    On Error GoTo HataYonetimi
 
@@ -329,6 +330,9 @@ TemizCikis:
    Exit Sub
 
 HataYonetimi:
+   hataMesaji = Err.Description
+   If Len(Trim(hataMesaji)) = 0 Then hataMesaji = "Bilinmeyen hata. Lütfen kaynak dosya başlıklarını ve 06/07 için Bütçe Talepleri sayfasını kontrol edin."
+
    On Error Resume Next
 
    If Not wbYeni Is Nothing Then wbYeni.Close SaveChanges:=False
@@ -339,7 +343,7 @@ HataYonetimi:
    Application.ScreenUpdating = eskiEkran
 
    MsgBox "İşlem sırasında hata oluştu:" & vbCrLf & vbCrLf & _
-          Err.Description, vbCritical, "Bütçe Kullanım Özeti"
+          hataMesaji, vbCritical, "Bütçe Kullanım Özeti"
 
 End Sub
 
@@ -374,7 +378,8 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
     Set dictProjeAdi = BuildProjeAdiDict(wsProjeBilgi)
     Set dictProjeKodu = BuildProjeKoduDict(wsProjeBilgi)
     Set wbButceTalepleri = Workbooks.Open(butceTalepleriDosyaYolu, ReadOnly:=True)
-    Set wsButceTalepleri = wbButceTalepleri.Worksheets(1)
+    Set wsButceTalepleri = FindWorksheetWithHeader(wbButceTalepleri, Array("Grup"))
+    If wsButceTalepleri Is Nothing Then Set wsButceTalepleri = wbButceTalepleri.Worksheets(1)
     
                 
 
@@ -1313,6 +1318,21 @@ Private Function EnsureBudgetUsageFolder(ByVal baseFolder As String, ByVal tarih
 
 End Function
 
+Private Function FindWorksheetWithHeader(ByVal wb As Workbook, ByVal possibleHeaders As Variant) As Worksheet
+
+   Dim ws As Worksheet
+
+   For Each ws In wb.Worksheets
+       If FindHeaderRow(ws, possibleHeaders) > 0 Then
+           Set FindWorksheetWithHeader = ws
+           Exit Function
+       End If
+   Next ws
+
+   Set FindWorksheetWithHeader = Nothing
+
+End Function
+
 Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal possibleHeaders As Variant) As Long
 
    Dim r As Long
@@ -1321,7 +1341,7 @@ Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal possibleHeaders As V
    Dim h As Variant
    Dim cellText As String
 
-   For r = 1 To 15
+   For r = 1 To Application.Min(50, LastUsedRow(ws))
 
        lastCol = ws.Cells(r, ws.Columns.Count).End(xlToLeft).Column
 
