@@ -407,8 +407,8 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
     CreateIsletmeKullanimOzeti wsVeriSeti, wsTalep, True, "Talep", dictProjeAdi
     CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeGerceklesen, False, "Gerçekleşen", dictProjeAdi, True
     CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeTalep, True, "Talep", dictProjeAdi, True
-    CreateGrupTasnifliButceOzeti wsVeriSeti, wsButceTalepleri, wsGrupGerceklesen, False, "Gerçekleşen", dictProjeKodu
-    CreateGrupTasnifliButceOzeti wsVeriSeti, wsButceTalepleri, wsGrupTalep, True, "Talep", dictProjeKodu
+    CreateGrupTasnifliButceOzeti wsVeriSeti, wsButceTalepleri, wsGrupGerceklesen, False, "Gerçekleşen", dictProjeAdi
+    CreateGrupTasnifliButceOzeti wsVeriSeti, wsButceTalepleri, wsGrupTalep, True, "Talep", dictProjeAdi
 
 
    AutoFitAllSheets wbIsletme
@@ -703,7 +703,7 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
                                          ByVal wsOzet As Worksheet, _
                                          ByVal humaStatuleriDahil As Boolean, _
                                          ByVal baslikTipi As String, _
-                                         ByVal dictProjeKodu As Object)
+                                         ByVal dictProjeAdi As Object)
 
    Dim headerRowButce As Long
    Dim headerRowVeri As Long
@@ -738,6 +738,7 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    Dim mudurluk As String
    Dim proje As String
    Dim projeKodu As String
+   Dim projeAdi As String
    Dim statu As String
    Dim ayNo As Integer
    Dim tutar As Double
@@ -779,8 +780,8 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
 
        deptNo = Trim(CStr(wsButceTalepleri.Cells(i, colDeptNo).Value))
        mudurluk = GetMudurlukFromDeptNo(deptNo)
-       proje = Trim(CStr(wsButceTalepleri.Cells(i, colButceProje).Value))
-       projeKodu = GetProjeKoduFromDict(dictProjeKodu, proje)
+       projeKodu = NormalizeProjectCode(wsButceTalepleri.Cells(i, colButceProje).Value)
+       proje = GetProjeAdiFromDict(dictProjeAdi, projeKodu)
 
        If Len(mudurluk) > 0 Or Len(projeKodu) > 0 Then
 
@@ -834,6 +835,7 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
 
                mudurluk = GetMudurlukFromDeptNo(CleanTalepEdenBolum(wsVeriSeti.Cells(i, colTalepEdenBolum).Value))
                projeKodu = NormalizeProjectCode(wsVeriSeti.Cells(i, colVeriProje).Value)
+               projeAdi = GetProjeAdiFromDict(dictProjeAdi, projeKodu)
                tutar = ToDoubleSafe(wsVeriSeti.Cells(i, colTalepToplamUSD).Value)
 
                tutarKey = NormalizeText(mudurluk) & "|" & NormalizeProjectCode(projeKodu)
@@ -841,14 +843,14 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
                If dictButceBilgi.Exists(tutarKey) Then
                    butceArr = dictButceBilgi(tutarKey)
                    grup = CStr(butceArr(1))
-                   proje = CStr(butceArr(2))
+                   proje = projeAdi
                ElseIf dictButceBilgiProje.Exists(NormalizeProjectCode(projeKodu)) Then
                    butceArr = dictButceBilgiProje(NormalizeProjectCode(projeKodu))
                    grup = CStr(butceArr(1))
-                   proje = CStr(butceArr(2))
+                   proje = projeAdi
                Else
                    grup = ""
-                   proje = projeKodu
+                   proje = projeAdi
                End If
 
                key = NormalizeText(mudurluk) & "|" & NormalizeProjectCode(projeKodu) & "|" & NormalizeText(grup)
@@ -1699,11 +1701,34 @@ Private Function GetProjeKoduFromDict(ByVal dictProjeKodu As Object, ByVal proje
 
 End Function
 
+Private Function GetProjeAdiFromDict(ByVal dictProjeAdi As Object, ByVal projeKodu As String) As String
+
+    Dim key As String
+
+    key = NormalizeProjectCode(projeKodu)
+
+    If Not dictProjeAdi Is Nothing Then
+        If dictProjeAdi.Exists(key) Then
+            If Len(Trim(CStr(dictProjeAdi(key)))) > 0 Then
+                GetProjeAdiFromDict = CStr(dictProjeAdi(key))
+                Exit Function
+            End If
+        End If
+    End If
+
+    GetProjeAdiFromDict = key
+
+End Function
+
 Private Function GetMudurlukFromDeptNo(ByVal deptNo As Variant) As String
 
     Dim s As String
 
     s = Trim(CStr(deptNo))
+
+    Do While Len(s) > 0 And Left(s, 1) = "0"
+        s = Mid(s, 2)
+    Loop
 
     If Len(s) >= 3 Then
         GetMudurlukFromDeptNo = Left(s, 3)
