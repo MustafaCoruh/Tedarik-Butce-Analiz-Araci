@@ -488,8 +488,8 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
 
                If projeBazliOzet Then
                    baskanlik = "V"
-                   mudurluk = "V46"
-                   birim = "V46"
+                   mudurluk = "KONSOLİDE"
+                   birim = "KONSOLİDE"
                Else
                    If Len(temizBirim) >= 1 Then
                        baskanlik = Left(temizBirim, 1)
