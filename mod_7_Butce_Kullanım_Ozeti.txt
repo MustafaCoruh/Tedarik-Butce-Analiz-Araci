@@ -694,8 +694,6 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
 
 End Sub
 
-
-
 Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
                                          ByVal wsButceTalepleri As Worksheet, _
                                          ByVal wsOzet As Worksheet, _
@@ -719,11 +717,14 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    Dim colGirisTarihi As Long
    Dim colTalepToplamUSD As Long
 
+   Dim dictButceBilgi As Object
    Dim dictSatir As Object
    Dim dictTutar As Object
    Dim arr As Variant
+   Dim butceArr As Variant
    Dim tutarArr As Variant
    Dim key As String
+   Dim butceKey As String
    Dim tutarKey As String
 
    Dim grup As String
@@ -741,6 +742,7 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    Dim k As Variant
    Dim m As Long
 
+   Set dictButceBilgi = CreateObject("Scripting.Dictionary")
    Set dictSatir = CreateObject("Scripting.Dictionary")
    Set dictTutar = CreateObject("Scripting.Dictionary")
 
@@ -757,6 +759,8 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
 
    lastRowButce = LastUsedRow(wsButceTalepleri)
 
+   ' Bütçe Talepleri artık satır kaynağı değildir.
+   ' Sadece KOKPİT satırlarına Grup / Proje adı bilgisi eşlemek için referans olarak kullanılır.
    For i = headerRowButce + 1 To lastRowButce
 
        grup = Trim(CStr(wsButceTalepleri.Cells(i, colGrup).Value))
@@ -765,17 +769,15 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
        proje = Trim(CStr(wsButceTalepleri.Cells(i, colButceProje).Value))
        projeKodu = GetProjeKoduFromDict(dictProjeKodu, proje)
 
-       If Len(mudurluk) > 0 Or Len(proje) > 0 Or Len(grup) > 0 Then
+       If Len(mudurluk) > 0 Or Len(projeKodu) > 0 Then
 
-           key = NormalizeText(mudurluk) & "|" & NormalizeText(proje) & "|" & NormalizeText(grup)
+           butceKey = NormalizeText(mudurluk) & "|" & NormalizeProjectCode(projeKodu)
 
-           If Not dictSatir.Exists(key) Then
-               ReDim arr(1 To 4)
-               arr(1) = grup
-               arr(2) = mudurluk
-               arr(3) = proje
-               arr(4) = projeKodu
-               dictSatir.Add key, arr
+           If Not dictButceBilgi.Exists(butceKey) Then
+               ReDim butceArr(1 To 2)
+               butceArr(1) = grup
+               butceArr(2) = proje
+               dictButceBilgi.Add butceKey, butceArr
            End If
 
        End If
@@ -797,6 +799,7 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    If colGirisTarihi = 0 Then Err.Raise vbObjectError + 1314, , "'Giriş Tarihi' sütunu bulunamadı."
    If colTalepToplamUSD = 0 Then Err.Raise vbObjectError + 1315, , "'Talep Toplam USD' sütunu bulunamadı."
 
+   ' Satırlar ve tutarlar KOKPİT/IPTSHUMA veri setinden oluşturulur.
    For i = headerRowVeri + 1 To lastRowVeri
 
        statu = CStr(wsVeriSeti.Cells(i, colStatu).Value)
@@ -813,17 +816,37 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
 
                tutarKey = NormalizeText(mudurluk) & "|" & NormalizeProjectCode(projeKodu)
 
-               If Not dictTutar.Exists(tutarKey) Then
+               If dictButceBilgi.Exists(tutarKey) Then
+                   butceArr = dictButceBilgi(tutarKey)
+                   grup = CStr(butceArr(1))
+                   proje = CStr(butceArr(2))
+               Else
+                   grup = ""
+                   proje = projeKodu
+               End If
+
+               key = NormalizeText(mudurluk) & "|" & NormalizeProjectCode(projeKodu) & "|" & NormalizeText(grup)
+
+               If Not dictSatir.Exists(key) Then
+                   ReDim arr(1 To 4)
+                   arr(1) = grup
+                   arr(2) = mudurluk
+                   arr(3) = proje
+                   arr(4) = projeKodu
+                   dictSatir.Add key, arr
+               End If
+
+               If Not dictTutar.Exists(key) Then
                    ReDim tutarArr(1 To 12)
                    For m = 1 To 12
                        tutarArr(m) = 0#
                    Next m
-                   dictTutar.Add tutarKey, tutarArr
+                   dictTutar.Add key, tutarArr
                End If
 
-               tutarArr = dictTutar(tutarKey)
+               tutarArr = dictTutar(key)
                tutarArr(ayNo) = CDbl(tutarArr(ayNo)) + tutar
-               dictTutar(tutarKey) = tutarArr
+               dictTutar(key) = tutarArr
 
            End If
 
@@ -859,10 +882,9 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    For Each k In dictSatir.Keys
 
        arr = dictSatir(k)
-       tutarKey = NormalizeText(arr(2)) & "|" & NormalizeProjectCode(arr(4))
 
-       If dictTutar.Exists(tutarKey) Then
-           tutarArr = dictTutar(tutarKey)
+       If dictTutar.Exists(k) Then
+           tutarArr = dictTutar(k)
        Else
            ReDim tutarArr(1 To 12)
            For m = 1 To 12
@@ -931,9 +953,6 @@ Private Sub CreateGrupTasnifliButceOzeti(ByVal wsVeriSeti As Worksheet, _
    wsOzet.Range("A2:S" & Application.Max(lastOzetRow, 2)).AutoFilter
 
 End Sub
-
-
-
 
 
 Private Sub PrepareKokpitVeriSeti(ByVal wsKaynak As Worksheet, _
