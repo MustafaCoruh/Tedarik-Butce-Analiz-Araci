@@ -11,21 +11,22 @@ End Sub
 Public Sub Run_ButceKullanimOzeti_FromAll(ByVal pTedarikDosyaYolu As String, _
                                            ByVal pYatirimButceDosyaYolu As String, _
                                            ByVal pProjeBilgiDosyaYolu As String, _
-                                           Optional ByVal pCiktiAnaKlasor As String = "")
+                                           Optional ByVal pCiktiAnaKlasor As String = "", _
+                                           Optional ByVal pButceTalepleriDosyaYolu As String = "")
 
-    ButceKullanimOzeti_Core pTedarikDosyaYolu, _
-                            pYatirimButceDosyaYolu, _
-                            pProjeBilgiDosyaYolu, _
-                            pCiktiAnaKlasor
+ButceKullanimOzeti_Core pTedarikDosyaYolu, _
+                        pYatirimButceDosyaYolu, _
+                        pProjeBilgiDosyaYolu, _
+                        pCiktiAnaKlasor, _
+                        pButceTalepleriDosyaYolu
 
 End Sub
-
 
 Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String = "", _
                                     Optional ByVal pYatirimButceDosyaYolu As String = "", _
                                     Optional ByVal pProjeBilgiDosyaYolu As String = "", _
-                                    Optional ByVal pCiktiAnaKlasor As String = "")
-
+                                    Optional ByVal pCiktiAnaKlasor As String = "", _
+                                    Optional ByVal pButceTalepleriDosyaYolu As String = "")
 
    Dim wbTedarik As Workbook
    Dim wbYatirim As Workbook
@@ -39,6 +40,7 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
    Dim tedarikDosyaYolu As String
    Dim yatirimDosyaYolu As String
    Dim projeBilgiDosyaYolu As String
+   Dim butceTalepleriDosyaYolu As String
 
    Dim tarihMetni As String
    Dim ciktiKlasoru As String
@@ -107,6 +109,13 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
     End If
     
     If Len(Trim(projeBilgiDosyaYolu)) = 0 Then GoTo TemizCikis
+    If Len(Trim(pButceTalepleriDosyaYolu)) > 0 Then
+    butceTalepleriDosyaYolu = pButceTalepleriDosyaYolu
+Else
+    butceTalepleriDosyaYolu = DosyaSec("Lütfen Bütçe Talepleri dosyasını seçiniz.")
+End If
+
+If Len(Trim(butceTalepleriDosyaYolu)) = 0 Then GoTo TemizCikis
 
 
    If Len(Trim(yatirimDosyaYolu)) = 0 Then GoTo TemizCikis
@@ -296,7 +305,11 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
    ' ------------------------------------------------------------
    ' 02 - İşletme Bütçe Kullanım Durum Özeti dosyası
    ' ------------------------------------------------------------
-   CreateIsletmeButceKullanimDosyasi wsTedarik, ciktiKlasoru, tarihMetni, projeBilgiDosyaYolu
+CreateIsletmeButceKullanimDosyasi wsTedarik, _
+                                  ciktiKlasoru, _
+                                  tarihMetni, _
+                                  projeBilgiDosyaYolu, _
+                                  butceTalepleriDosyaYolu
 
 TemizCikis:
    On Error Resume Next
@@ -333,7 +346,8 @@ End Sub
 Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
                                                ByVal ciktiKlasoru As String, _
                                                ByVal tarihMetni As String, _
-                                               ByVal projeBilgiDosyaYolu As String)
+                                               ByVal projeBilgiDosyaYolu As String, _
+                                               ByVal butceTalepleriDosyaYolu As String)
 
 
    Dim wbIsletme As Workbook
@@ -349,6 +363,9 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
    Dim wsProjeBilgi As Worksheet
    Dim dictProjeAdi As Object
    Dim dictProjeKodu As Object
+   Dim wbButceTalepleri As Workbook
+   Dim wsButceTipleri As Worksheet
+   Dim wsButceTipleriKopya As Worksheet
 
 
    ciktiDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
@@ -356,26 +373,36 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
     Set wbProjeBilgi = Workbooks.Open(projeBilgiDosyaYolu, ReadOnly:=True)
     Set wsProjeBilgi = wbProjeBilgi.Worksheets(1)
     Set dictProjeAdi = BuildProjeAdiDict(wsProjeBilgi)
+    Set wbButceTalepleri = Workbooks.Open(butceTalepleriDosyaYolu, ReadOnly:=True)
+Set wsButceTipleri = FindWorksheetByName(wbButceTalepleri, "Kullanılacak Bütçe Tipleri")
+
+If wsButceTipleri Is Nothing Then
+    Err.Raise vbObjectError + 1325, , "Bütçe Talepleri dosyasında 'Kullanılacak Bütçe Tipleri' çalışma sayfası bulunamadı."
+End If
     'Set dictProjeKodu = BuildProjeKoduDict(wsProjeBilgi)
 
                 
 
    Set wbIsletme = Workbooks.Add(xlWBATWorksheet)
 
-    Set wsVeriSeti = wbIsletme.Worksheets(1)
-    wsVeriSeti.Name = "01-Veri Seti"
-    
-    Set wsProjeGerceklesen = wbIsletme.Worksheets.Add(After:=wsVeriSeti)
-    wsProjeGerceklesen.Name = "02-V4000-GERÇEKLEŞEN"
-    
-    Set wsProjeTalep = wbIsletme.Worksheets.Add(After:=wsProjeGerceklesen)
-    wsProjeTalep.Name = "03-V4000-TALEP"
-    
-    Set wsGerceklesen = wbIsletme.Worksheets.Add(After:=wsProjeTalep)
-    wsGerceklesen.Name = "04-BİRİMLER-GERÇEKLEŞEN"
-    
-    Set wsTalep = wbIsletme.Worksheets.Add(After:=wsGerceklesen)
-    wsTalep.Name = "05-BİRİMLER-TALEP"
+Set wsVeriSeti = wbIsletme.Worksheets(1)
+wsVeriSeti.Name = "01-Veri Seti"
+
+wsButceTipleri.Copy After:=wsVeriSeti
+Set wsButceTipleriKopya = wbIsletme.Worksheets(wsVeriSeti.Index + 1)
+wsButceTipleriKopya.Name = "02-Kullanılacak Bütçe Tipleri"
+
+Set wsProjeGerceklesen = wbIsletme.Worksheets.Add(After:=wsButceTipleriKopya)
+wsProjeGerceklesen.Name = "03-V4000-GERÇEKLEŞEN"
+
+Set wsProjeTalep = wbIsletme.Worksheets.Add(After:=wsProjeGerceklesen)
+wsProjeTalep.Name = "04-V4000- TALEP"
+
+Set wsGerceklesen = wbIsletme.Worksheets.Add(After:=wsProjeTalep)
+wsGerceklesen.Name = "05-BİRİMLER-GERÇEKLEŞEN"
+
+Set wsTalep = wbIsletme.Worksheets.Add(After:=wsGerceklesen)
+wsTalep.Name = "06-BİRİMLER-TALEP"
 
    PrepareKokpitVeriSeti wsTedarik, wsVeriSeti, "IPTSHUMA"
 
@@ -389,6 +416,7 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
    wbIsletme.SaveAs Filename:=ciktiDosyaYolu, FileFormat:=xlOpenXMLWorkbook
    wbIsletme.Close SaveChanges:=False
    If Not wbProjeBilgi Is Nothing Then wbProjeBilgi.Close SaveChanges:=False
+   If Not wbButceTalepleri Is Nothing Then wbButceTalepleri.Close SaveChanges:=False
    'If Not wbButceTalepleri Is Nothing Then wbButceTalepleri.Close SaveChanges:=False
 
 End Sub
@@ -997,6 +1025,22 @@ Private Function EnsureBudgetUsageFolder(ByVal baseFolder As String, ByVal tarih
    If Dir(EnsureBudgetUsageFolder, vbDirectory) = "" Then
        MkDir EnsureBudgetUsageFolder
    End If
+
+End Function
+Private Function FindWorksheetByName(ByVal wb As Workbook, ByVal sheetName As String) As Worksheet
+
+   Dim ws As Worksheet
+
+   If wb Is Nothing Then Exit Function
+
+   For Each ws In wb.Worksheets
+       If NormalizeText(ws.Name) = NormalizeText(sheetName) Then
+           Set FindWorksheetByName = ws
+           Exit Function
+       End If
+   Next ws
+
+   Set FindWorksheetByName = Nothing
 
 End Function
 
