@@ -366,6 +366,9 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
    Dim wbButceTalepleri As Workbook
    Dim wsButceTipleri As Worksheet
    Dim wsButceTipleriKopya As Worksheet
+   Dim wsButceKaynak As Worksheet
+   Dim dictKullanilacakButceTipleri As Object
+   Dim dictProjeButce As Object
 
 
    ciktiDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
@@ -379,7 +382,13 @@ Set wsButceTipleri = FindWorksheetByName(wbButceTalepleri, "Kullanılacak Bütç
 If wsButceTipleri Is Nothing Then
     Err.Raise vbObjectError + 1325, , "Bütçe Talepleri dosyasında 'Kullanılacak Bütçe Tipleri' çalışma sayfası bulunamadı."
 End If
-    'Set dictProjeKodu = BuildProjeKoduDict(wsProjeBilgi)
+    Set wsButceKaynak = FindWorksheetWithHeaders(wbButceTalepleri, Array("Proje", "Gider Adı", "Grup", "Toplam USD"))
+If wsButceKaynak Is Nothing Then
+    Err.Raise vbObjectError + 1326, , "Bütçe Talepleri dosyasında 'Proje', 'Gider Adı', 'Grup' ve 'Toplam USD' sütunlarını içeren kaynak sayfa bulunamadı."
+End If
+
+Set dictKullanilacakButceTipleri = BuildKullanilacakButceTipleriDict(wsButceTipleri)
+Set dictProjeButce = BuildProjeButceDict(wsButceKaynak, dictKullanilacakButceTipleri, dictProjeAdi)
 
                 
 
@@ -408,8 +417,8 @@ wsTalep.Name = "06-BİRİMLER-TALEP"
 
     CreateIsletmeKullanimOzeti wsVeriSeti, wsGerceklesen, False, "Gerçekleşen", dictProjeAdi
     CreateIsletmeKullanimOzeti wsVeriSeti, wsTalep, True, "Talep", dictProjeAdi
-    CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeGerceklesen, False, "Gerçekleşen", dictProjeAdi, True
-    CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeTalep, True, "Talep", dictProjeAdi, True
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeGerceklesen, False, "Gerçekleşen", dictProjeAdi, True, dictProjeButce
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeTalep, True, "Talep", dictProjeAdi, True, dictProjeButce
 
 
    AutoFitAllSheets wbIsletme
@@ -427,7 +436,9 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
                                       ByVal humaStatuleriDahil As Boolean, _
                                       ByVal baslikTipi As String, _
                                       ByVal dictProjeAdi As Object, _
-                                      Optional ByVal projeBazliOzet As Boolean = False)
+                                      Optional ByVal projeBazliOzet As Boolean = False, _
+                                      Optional ByVal dictProjeButce As Object = Nothing)
+                                      
 
    Dim headerRow As Long
    Dim lastRow As Long
@@ -612,7 +623,12 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
        wsOzet.Cells(satir, "G").Value = arr(5) ' Proje Adı
        wsOzet.Cells(satir, "H").Value = ""
        wsOzet.Cells(satir, "I").Value = arr(1) ' Başkanlık
-       wsOzet.Cells(satir, "J").Value = ""
+
+If projeBazliOzet And Not dictProjeButce Is Nothing Then
+    wsOzet.Cells(satir, "J").Value = GetProjeButceFromDict(dictProjeButce, arr(4), arr(5))
+Else
+    wsOzet.Cells(satir, "J").Value = ""
+End If
 
        toplam = 0#
 
@@ -1025,6 +1041,290 @@ Private Function EnsureBudgetUsageFolder(ByVal baseFolder As String, ByVal tarih
    If Dir(EnsureBudgetUsageFolder, vbDirectory) = "" Then
        MkDir EnsureBudgetUsageFolder
    End If
+
+End Function
+Private Function FindWorksheetWithHeaders(ByVal wb As Workbook, ByVal requiredHeaders As Variant) As Worksheet
+
+   Dim ws As Worksheet
+   Dim headerRow As Long
+   Dim h As Variant
+   Dim tumBasliklarVar As Boolean
+
+   If wb Is Nothing Then Exit Function
+
+   For Each ws In wb.Worksheets
+       headerRow = FindHeaderRow(ws, requiredHeaders)
+       If headerRow > 0 Then
+           tumBasliklarVar = True
+           For Each h In requiredHeaders
+               If FindHeaderCol(ws, headerRow, Array(CStr(h))) = 0 Then
+                   tumBasliklarVar = False
+                   Exit For
+               End If
+           Next h
+
+           If tumBasliklarVar Then
+               Set FindWorksheetWithHeaders = ws
+               Exit Function
+           End If
+       End If
+   Next ws
+
+   Set FindWorksheetWithHeaders = Nothing
+
+End Function
+
+Private Function BuildKullanilacakButceTipleriDict(ByVal wsButceTipleri As Worksheet) As Object
+
+   Dim dict As Object
+   Dim lastRow As Long
+   Dim i As Long
+   Dim giderAdi As String
+   Dim grup As String
+    Dim key As String
+    Dim projeAdiKey As String
+    Dim tutar As Double
+
+   Set dict = CreateObject("Scripting.Dictionary")
+   lastRow = LastUsedRow(wsButceTipleri)
+
+   For i = 1 To lastRow
+       giderAdi = Trim(CStr(wsButceTipleri.Cells(i, "A").Value))
+       grup = Trim(CStr(wsButceTipleri.Cells(i, "B").Value))
+
+       If Len(giderAdi) > 0 Or Len(grup) > 0 Then
+           If IsGreenFont(wsButceTipleri.Cells(i, "A")) Or IsGreenFont(wsButceTipleri.Cells(i, "B")) Then
+               key = NormalizeText(giderAdi) & "|" & NormalizeText(grup)
+               If Not dict.Exists(key) Then dict.Add key, True
+           End If
+       End If
+   Next i
+
+   Set BuildKullanilacakButceTipleriDict = dict
+
+End Function
+
+Private Function BuildProjeButceDict(ByVal wsButceKaynak As Worksheet, _
+                                      ByVal dictKullanilacakButceTipleri As Object, _
+                                      ByVal dictProjeAdi As Object) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colProje As Long
+   Dim colGiderAdi As Long
+   Dim colGrup As Long
+   Dim colToplamUsd As Long
+   Dim i As Long
+   Dim projeDegeri As String
+   Dim projeKodu As String
+   Dim giderAdi As String
+   Dim grup As String
+   Dim lastProjeDegeri As String
+   Dim lastGiderAdi As String
+   Dim lastGrup As String
+   Dim key As String
+   Dim tutar As Double
+   Dim projeAdiKey As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   If wsButceKaynak Is Nothing Then
+       Set BuildProjeButceDict = dict
+       Exit Function
+   End If
+
+   If dictKullanilacakButceTipleri Is Nothing Then
+       Set dictKullanilacakButceTipleri = CreateObject("Scripting.Dictionary")
+   End If
+   
+   headerRow = FindHeaderRow(wsButceKaynak, Array("Proje", "Proje Adı", "Proje Adi", "Proje Kodu", "Proje Kod"))
+If headerRow = 0 Then Err.Raise vbObjectError + 1327, , "Bütçe Talepleri kaynak sayfasında 'Proje' başlığı bulunamadı."
+
+   colProje = FindHeaderCol(wsButceKaynak, headerRow, Array("Proje", "Proje Adı", "Proje Adi", "Proje Kodu", "Proje Kod"))
+   colGiderAdi = FindHeaderCol(wsButceKaynak, headerRow, Array("Gider Adı", "Gider Adi"))
+   colGrup = FindHeaderCol(wsButceKaynak, headerRow, Array("Grup"))
+   colToplamUsd = FindHeaderCol(wsButceKaynak, headerRow, Array("Toplam USD", "Toplam USD Bütçe", "Toplam USD Butce"))
+
+   If colProje = 0 Then Err.Raise vbObjectError + 1328, , "Bütçe Talepleri kaynak sayfasında 'Proje' sütunu bulunamadı."
+   If colGiderAdi = 0 Then Err.Raise vbObjectError + 1329, , "Bütçe Talepleri kaynak sayfasında 'Gider Adı' sütunu bulunamadı."
+   If colGrup = 0 Then Err.Raise vbObjectError + 1330, , "Bütçe Talepleri kaynak sayfasında 'Grup' sütunu bulunamadı."
+   If colToplamUsd = 0 Then Err.Raise vbObjectError + 1331, , "Bütçe Talepleri kaynak sayfasında 'Toplam USD' sütunu bulunamadı."
+
+   lastRow = LastUsedRow(wsButceKaynak)
+
+   For i = headerRow + 1 To lastRow
+       projeDegeri = Trim(CStr(wsButceKaynak.Cells(i, colProje).Value))
+       giderAdi = Trim(CStr(wsButceKaynak.Cells(i, colGiderAdi).Value))
+       grup = Trim(CStr(wsButceKaynak.Cells(i, colGrup).Value))
+
+       If Len(projeDegeri) > 0 Then lastProjeDegeri = projeDegeri Else projeDegeri = lastProjeDegeri
+       If Len(giderAdi) > 0 Then lastGiderAdi = giderAdi Else giderAdi = lastGiderAdi
+       If Len(grup) > 0 Then lastGrup = grup Else grup = lastGrup
+
+       projeKodu = ResolveProjeButceKey(projeDegeri, dictProjeAdi)
+       key = NormalizeText(giderAdi) & "|" & NormalizeText(grup)
+
+       If Len(projeKodu) > 0 Then
+           If dictKullanilacakButceTipleri.Exists(key) Then
+               tutar = ToDoubleSafe(wsButceKaynak.Cells(i, colToplamUsd).Value)
+projeAdiKey = NormalizeProjectNameKey(projeDegeri)
+
+AddToDict dict, projeKodu, tutar
+
+If Len(projeAdiKey) > 0 And projeAdiKey <> NormalizeText(projeKodu) Then
+    AddToDict dict, projeAdiKey, tutar
+End If
+           End If
+       End If
+   Next i
+
+   Set BuildProjeButceDict = dict
+
+End Function
+
+Private Function GetProjeButceFromDict(ByVal dictProjeButce As Object, _
+                                       ByVal projeKodu As Variant, _
+                                       ByVal projeAdi As Variant) As Variant
+
+   Dim projeAdiKey As String
+   Dim projeKoduKey As String
+   Dim projeKoduTextKey As String
+   Dim key As Variant
+
+   If dictProjeButce Is Nothing Then
+       GetProjeButceFromDict = ""
+       Exit Function
+   End If
+
+   projeAdiKey = NormalizeProjectNameKey(projeAdi)
+   If Len(projeAdiKey) > 0 Then
+       If dictProjeButce.Exists(projeAdiKey) Then
+           GetProjeButceFromDict = dictProjeButce(projeAdiKey)
+           Exit Function
+       End If
+   End If
+
+   projeKoduKey = NormalizeProjectCode(projeKodu)
+   If Len(projeKoduKey) > 0 Then
+       If dictProjeButce.Exists(projeKoduKey) Then
+           GetProjeButceFromDict = dictProjeButce(projeKoduKey)
+           Exit Function
+       End If
+   End If
+
+   projeKoduTextKey = NormalizeText(projeKodu)
+   If Len(projeKoduTextKey) > 0 Then
+       If dictProjeButce.Exists(projeKoduTextKey) Then
+           GetProjeButceFromDict = dictProjeButce(projeKoduTextKey)
+           Exit Function
+       End If
+   End If
+
+   If Len(projeAdiKey) > 0 Then
+       For Each key In dictProjeButce.Keys
+           If IsProjectNameKeyMatch(CStr(key), projeAdiKey) Then
+               GetProjeButceFromDict = dictProjeButce(key)
+               Exit Function
+           End If
+       Next key
+   End If
+
+   GetProjeButceFromDict = ""
+
+End Function
+
+Private Function NormalizeProjectNameKey(ByVal valueIn As Variant) As String
+
+   Dim s As String
+   Dim p As Long
+
+   s = NormalizeText(valueIn)
+
+   p = InStr(1, s, " - ", vbTextCompare)
+   If p > 0 And p < Len(s) Then
+       s = Trim(Mid(s, p + 3))
+   End If
+
+   NormalizeProjectNameKey = s
+
+End Function
+
+Private Function IsProjectNameKeyMatch(ByVal dictKey As String, ByVal projeAdiKey As String) As Boolean
+
+   Dim normalizedDictKey As String
+
+   normalizedDictKey = NormalizeProjectNameKey(dictKey)
+
+   If Len(normalizedDictKey) = 0 Or Len(projeAdiKey) = 0 Then Exit Function
+
+   If normalizedDictKey = projeAdiKey Then
+       IsProjectNameKeyMatch = True
+       Exit Function
+   End If
+
+   If Len(projeAdiKey) >= 8 And InStr(1, normalizedDictKey, projeAdiKey, vbTextCompare) > 0 Then
+       IsProjectNameKeyMatch = True
+       Exit Function
+   End If
+
+   If Len(normalizedDictKey) >= 8 And InStr(1, projeAdiKey, normalizedDictKey, vbTextCompare) > 0 Then
+       IsProjectNameKeyMatch = True
+       Exit Function
+   End If
+
+End Function
+
+Private Function ResolveProjeButceKey(ByVal projeDegeri As Variant, ByVal dictProjeAdi As Object) As String
+
+   Dim rawValue As String
+   Dim normalizedCode As String
+   Dim normalizedName As String
+   Dim key As Variant
+
+   rawValue = Trim(CStr(projeDegeri))
+   normalizedCode = NormalizeProjectCode(rawValue)
+
+   If Len(normalizedCode) = 0 Then
+       ResolveProjeButceKey = ""
+       Exit Function
+   End If
+
+   If Not dictProjeAdi Is Nothing Then
+       If dictProjeAdi.Exists(normalizedCode) Then
+           ResolveProjeButceKey = normalizedCode
+           Exit Function
+       End If
+
+       normalizedName = NormalizeText(rawValue)
+
+       For Each key In dictProjeAdi.Keys
+           If NormalizeText(dictProjeAdi(key)) = normalizedName Then
+               ResolveProjeButceKey = CStr(key)
+               Exit Function
+           End If
+       Next key
+   End If
+
+   ResolveProjeButceKey = normalizedCode
+
+End Function
+
+Private Function IsGreenFont(ByVal cell As Range) As Boolean
+
+   Dim renk As Long
+   Dim r As Long
+   Dim g As Long
+   Dim b As Long
+
+   If cell Is Nothing Then Exit Function
+
+   renk = cell.Font.Color
+   r = renk Mod 256
+   g = (renk \ 256) Mod 256
+   b = (renk \ 65536) Mod 256
+
+   IsGreenFont = (g > r And g > b And g >= 80)
 
 End Function
 Private Function FindWorksheetByName(ByVal wb As Workbook, ByVal sheetName As String) As Worksheet
