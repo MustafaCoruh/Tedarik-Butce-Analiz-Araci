@@ -12,12 +12,14 @@ End Sub
 Public Sub Run_ButceKullanimOzeti_FromAll(ByVal pTedarikDosyaYolu As String, _
                                            ByVal pYatirimButceDosyaYolu As String, _
                                            ByVal pProjeBilgiDosyaYolu As String, _
-                                           Optional ByVal pCiktiAnaKlasor As String = "")
+                                           Optional ByVal pCiktiAnaKlasor As String = "", _
+                                           Optional ByVal pButceTalepleriDosyaYolu As String = "")
 
     ButceKullanimOzeti_Core pTedarikDosyaYolu, _
                             pYatirimButceDosyaYolu, _
                             pProjeBilgiDosyaYolu, _
-                            pCiktiAnaKlasor
+                            pCiktiAnaKlasor, _
+                            pButceTalepleriDosyaYolu
 
 End Sub
 
@@ -25,7 +27,8 @@ End Sub
 Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String = "", _
                                     Optional ByVal pYatirimButceDosyaYolu As String = "", _
                                     Optional ByVal pProjeBilgiDosyaYolu As String = "", _
-                                    Optional ByVal pCiktiAnaKlasor As String = "")
+                                    Optional ByVal pCiktiAnaKlasor As String = "", _
+                                    Optional ByVal pButceTalepleriDosyaYolu As String = "")
 
 
    Dim wbTedarik As Workbook
@@ -40,6 +43,7 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
    Dim tedarikDosyaYolu As String
    Dim yatirimDosyaYolu As String
    Dim projeBilgiDosyaYolu As String
+   Dim butceTalepleriDosyaYolu As String
 
    Dim tarihMetni As String
    Dim ciktiKlasoru As String
@@ -76,6 +80,7 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
 
    Dim eskiEkran As Boolean
    Dim eskiUyari As Boolean
+   Dim hataMesaji As String
 
    On Error GoTo HataYonetimi
 
@@ -109,6 +114,13 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
     
     If Len(Trim(projeBilgiDosyaYolu)) = 0 Then GoTo TemizCikis
 
+   If Len(Trim(pButceTalepleriDosyaYolu)) > 0 Then
+       butceTalepleriDosyaYolu = pButceTalepleriDosyaYolu
+   Else
+       butceTalepleriDosyaYolu = DosyaSec("Lütfen Bütçe Talepleri dosyasını seçiniz.")
+   End If
+
+   If Len(Trim(butceTalepleriDosyaYolu)) = 0 Then GoTo TemizCikis
 
    If Len(Trim(yatirimDosyaYolu)) = 0 Then GoTo TemizCikis
 
@@ -297,7 +309,12 @@ Private Sub ButceKullanimOzeti_Core(Optional ByVal pTedarikDosyaYolu As String =
    ' ------------------------------------------------------------
    ' 02 - İşletme Bütçe Kullanım Durum Özeti dosyası
    ' ------------------------------------------------------------
-   CreateIsletmeButceKullanimDosyasi wsTedarik, ciktiKlasoru, tarihMetni, projeBilgiDosyaYolu
+   CreateIsletmeButceKullanimDosyasi wsTedarik, ciktiKlasoru, tarihMetni, projeBilgiDosyaYolu, butceTalepleriDosyaYolu
+
+   ' ------------------------------------------------------------
+   ' 03 - Gider Adı Tasnifli İşletme dosyaları
+   ' ------------------------------------------------------------
+   CreateGiderAdiTasnifliIsletmeDosyalari wsTedarik, ciktiKlasoru, tarihMetni, butceTalepleriDosyaYolu, projeBilgiDosyaYolu
 
 TemizCikis:
    On Error Resume Next
@@ -317,6 +334,10 @@ TemizCikis:
    Exit Sub
 
 HataYonetimi:
+   hataMesaji = Err.Description
+   If Len(Trim(hataMesaji)) = 0 Then hataMesaji = "Bilinmeyen hata. Lütfen kaynak dosya başlıklarını kontrol edin."
+   hataMesaji = "Hata No: " & Err.Number & vbCrLf & hataMesaji
+
    On Error Resume Next
 
    If Not wbYeni Is Nothing Then wbYeni.Close SaveChanges:=False
@@ -327,24 +348,38 @@ HataYonetimi:
    Application.ScreenUpdating = eskiEkran
 
    MsgBox "İşlem sırasında hata oluştu:" & vbCrLf & vbCrLf & _
-          Err.Description, vbCritical, "Bütçe Kullanım Özeti"
+          hataMesaji, vbCritical, "Bütçe Kullanım Özeti"
 
 End Sub
 
 Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
                                                ByVal ciktiKlasoru As String, _
                                                ByVal tarihMetni As String, _
-                                               ByVal projeBilgiDosyaYolu As String)
+                                               ByVal projeBilgiDosyaYolu As String, _
+                                               ByVal butceTalepleriDosyaYolu As String)
 
 
    Dim wbIsletme As Workbook
    Dim wsVeriSeti As Worksheet
    Dim wsGerceklesen As Worksheet
    Dim wsTalep As Worksheet
+   Dim wsProjeGerceklesen As Worksheet
+   Dim wsProjeTalep As Worksheet
+   Dim wsMudurlukGerceklesen As Worksheet
+   Dim wsMudurlukTalep As Worksheet
    Dim ciktiDosyaYolu As String
    Dim wbProjeBilgi As Workbook
    Dim wsProjeBilgi As Worksheet
+   Dim wbButceTalepleri As Workbook
+   Dim wsButceTipleri As Worksheet
+   Dim wsButceKaynak As Worksheet
+   Dim wsButceTipleriKopya As Worksheet
    Dim dictProjeAdi As Object
+   Dim dictKullanilacakButceTipleri As Object
+   Dim dictProjeButce As Object
+   Dim dictMudurlukProjeButce As Object
+   Dim dictProjectFinName As Object
+   Dim dictProjeGiderAdi As Object
 
 
    ciktiDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
@@ -352,30 +387,66 @@ Private Sub CreateIsletmeButceKullanimDosyasi(ByVal wsTedarik As Worksheet, _
     Set wbProjeBilgi = Workbooks.Open(projeBilgiDosyaYolu, ReadOnly:=True)
     Set wsProjeBilgi = wbProjeBilgi.Worksheets(1)
     Set dictProjeAdi = BuildProjeAdiDict(wsProjeBilgi)
-    
-                
+    Set wbButceTalepleri = Workbooks.Open(butceTalepleriDosyaYolu, ReadOnly:=True)
+    Set wsButceTipleri = FindWorksheetByName(wbButceTalepleri, "Kullanılacak Bütçe Tipleri")
+
+    If wsButceTipleri Is Nothing Then
+        Err.Raise vbObjectError + 1325, , "Bütçe Talepleri dosyasında 'Kullanılacak Bütçe Tipleri' çalışma sayfası bulunamadı."
+    End If
+
+    Set wsButceKaynak = FindWorksheetWithHeaders(wbButceTalepleri, Array("Proje", "Gider Adı", "Grup", "Toplam USD"))
+    If wsButceKaynak Is Nothing Then
+        Err.Raise vbObjectError + 1326, , "Bütçe Talepleri dosyasında 'Proje', 'Gider Adı', 'Grup' ve 'Toplam USD' sütunlarını içeren kaynak sayfa bulunamadı."
+    End If
+
+    Set dictKullanilacakButceTipleri = BuildKullanilacakButceTipleriDict(wsButceTipleri)
+    Set dictProjeButce = BuildProjeButceDict(wsButceKaynak, dictKullanilacakButceTipleri, dictProjeAdi)
+    Set dictMudurlukProjeButce = BuildMudurlukProjeButceDict(wsButceKaynak, dictKullanilacakButceTipleri)
+    Set dictProjectFinName = BuildProjectFinNameDict(wsProjeBilgi)
+    Set dictProjeGiderAdi = BuildButceTalepleriProjeGiderDict(wsButceKaynak)
 
    Set wbIsletme = Workbooks.Add(xlWBATWorksheet)
 
    Set wsVeriSeti = wbIsletme.Worksheets(1)
    wsVeriSeti.Name = "01 - Veri Seti"
 
-   Set wsGerceklesen = wbIsletme.Worksheets.Add(After:=wsVeriSeti)
-   wsGerceklesen.Name = "02 - Kullanım Özeti-GERÇEKLEŞEN"
+   wsButceTipleri.Copy After:=wsVeriSeti
+   Set wsButceTipleriKopya = wbIsletme.Worksheets(wsVeriSeti.Index + 1)
+   wsButceTipleriKopya.Name = "02-Kullanılacak Bütçe Tipleri"
+
+   Set wsProjeGerceklesen = wbIsletme.Worksheets.Add(After:=wsButceTipleriKopya)
+   wsProjeGerceklesen.Name = "03- V4000-GERÇEKLEŞEN"
+
+   Set wsProjeTalep = wbIsletme.Worksheets.Add(After:=wsProjeGerceklesen)
+   wsProjeTalep.Name = "04- V4000 - TALEP"
+
+   Set wsGerceklesen = wbIsletme.Worksheets.Add(After:=wsProjeTalep)
+   wsGerceklesen.Name = "05- BİRİMLER-GERÇEKLEŞEN"
 
    Set wsTalep = wbIsletme.Worksheets.Add(After:=wsGerceklesen)
-   wsTalep.Name = "03 - Kullanım Özeti-TALEP"
+   wsTalep.Name = "06-BİRİMLER-TALEP"
+
+   Set wsMudurlukGerceklesen = wbIsletme.Worksheets.Add(After:=wsTalep)
+   wsMudurlukGerceklesen.Name = "07-MÜDÜRLÜK-GERÇEKLEŞEN"
+
+   Set wsMudurlukTalep = wbIsletme.Worksheets.Add(After:=wsMudurlukGerceklesen)
+   wsMudurlukTalep.Name = "08-MÜDÜRLÜK TALEP"
 
    PrepareKokpitVeriSeti wsTedarik, wsVeriSeti, "IPTSHUMA"
 
-    CreateIsletmeKullanimOzeti wsVeriSeti, wsGerceklesen, False, "Gerçekleşen", dictProjeAdi
-    CreateIsletmeKullanimOzeti wsVeriSeti, wsTalep, True, "Talep", dictProjeAdi
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeGerceklesen, False, "Gerçekleşen", dictProjeAdi, True, dictProjeButce, dictProjectFinName, dictProjeGiderAdi
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsProjeTalep, True, "Talep", dictProjeAdi, True, dictProjeButce, dictProjectFinName, dictProjeGiderAdi
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsGerceklesen, False, "Gerçekleşen", dictProjeAdi, False, Nothing, dictProjectFinName, dictProjeGiderAdi
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsTalep, True, "Talep", dictProjeAdi, False, Nothing, dictProjectFinName, dictProjeGiderAdi
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsMudurlukGerceklesen, False, "Gerçekleşen", dictProjeAdi, False, dictProjeButce, dictProjectFinName, dictProjeGiderAdi, True, dictMudurlukProjeButce
+    CreateIsletmeKullanimOzeti wsVeriSeti, wsMudurlukTalep, True, "Talep", dictProjeAdi, False, dictProjeButce, dictProjectFinName, dictProjeGiderAdi, True, dictMudurlukProjeButce
 
 
    AutoFitAllSheets wbIsletme
    wbIsletme.SaveAs Filename:=ciktiDosyaYolu, FileFormat:=xlOpenXMLWorkbook
    wbIsletme.Close SaveChanges:=False
    If Not wbProjeBilgi Is Nothing Then wbProjeBilgi.Close SaveChanges:=False
+   If Not wbButceTalepleri Is Nothing Then wbButceTalepleri.Close SaveChanges:=False
 
 End Sub
 
@@ -384,7 +455,13 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
                                       ByVal wsOzet As Worksheet, _
                                       ByVal humaStatuleriDahil As Boolean, _
                                       ByVal baslikTipi As String, _
-                                      ByVal dictProjeAdi As Object)
+                                      ByVal dictProjeAdi As Object, _
+                                      Optional ByVal projeBazliOzet As Boolean = False, _
+                                      Optional ByVal dictProjeButce As Object = Nothing, _
+                                      Optional ByVal dictProjectFinName As Object = Nothing, _
+                                      Optional ByVal dictProjeGiderAdi As Object = Nothing, _
+                                      Optional ByVal mudurlukBazliOzet As Boolean = False, _
+                                      Optional ByVal dictMudurlukProjeButce As Object = Nothing)
 
    Dim headerRow As Long
    Dim lastRow As Long
@@ -406,6 +483,8 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
    Dim birim As String
    Dim proje As String
    Dim projeAdi As String
+   Dim projectFinName As String
+   Dim giderAdlari As String
    Dim statu As String
    Dim ayNo As Integer
    Dim tutar As Double
@@ -447,35 +526,59 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
                talepEdenBolum = CStr(wsVeriSeti.Cells(i, colTalepEdenBolum).Value)
                temizBirim = CleanTalepEdenBolum(talepEdenBolum)
 
-               If Len(temizBirim) >= 1 Then
-                   baskanlik = Left(temizBirim, 1)
+               If projeBazliOzet Then
+                   baskanlik = "V"
+                   mudurluk = "V4000"
+                   birim = ""
                Else
-                   baskanlik = ""
+                   If Len(temizBirim) >= 1 Then
+                       baskanlik = Left(temizBirim, 1)
+                   Else
+                       baskanlik = ""
+                   End If
+
+                   If mudurlukBazliOzet Then
+                       mudurluk = NormalizeMudurlukKodu(temizBirim)
+                       birim = ""
+                   Else
+                       If Len(temizBirim) >= 3 Then
+                           mudurluk = Left(temizBirim, 3)
+                       Else
+                           mudurluk = temizBirim
+                       End If
+
+                       birim = temizBirim
+                   End If
                End If
 
-               If Len(temizBirim) >= 3 Then
-                   mudurluk = Left(temizBirim, 3)
-               Else
-                   mudurluk = temizBirim
-               End If
-
-               birim = temizBirim
                proje = Trim(CStr(wsVeriSeti.Cells(i, colProje).Value))
                tutar = ToDoubleSafe(wsVeriSeti.Cells(i, colTalepToplamUSD).Value)
 
-               If Not dictProjeAdi Is Nothing Then
-                   If dictProjeAdi.Exists(NormalizeProjectCode(proje)) Then
-                       projeAdi = dictProjeAdi(NormalizeProjectCode(proje))
-                   Else
-                       projeAdi = ""
+               projeAdi = GetProjeAdiFromDict(dictProjeAdi, proje)
+
+               If Not dictProjectFinName Is Nothing Then
+                   ' 03/04 V4000 ve 05/06 Birimler sayfalarında Gider Adı Tasnifli dosyalardaki proje algoritması kullanılır:
+                   ' KOKPİT Proje kodu -> Proje Bilgileri PROJECT_CODE/PROJECT_FIN_NAME -> Bütçe Talepleri Proje eşleşmesi.
+                   projectFinName = GetProjectFinNameFromDict(dictProjectFinName, proje)
+                   giderAdlari = GetGiderAdlariFromProjectDict(dictProjeGiderAdi, projectFinName)
+
+                   If Len(projectFinName) > 0 And projectFinName <> NormalizeProjectCode(proje) Then
+                       projeAdi = projectFinName
                    End If
-               Else
-                   projeAdi = ""
                End If
 
-               ' Aynı Birim + Proje tek satır.
-               ' Aynı proje farklı birimdeyse ayrı satır.
-               key = birim & "|" & proje
+               If projeBazliOzet Then
+                   ' Proje bazlı özetlerde aynı proje tek satırdır.
+                   key = NormalizeProjectCode(proje)
+               ElseIf mudurlukBazliOzet Then
+                   ' Müdürlük bazlı özetlerde aynı Müdürlük + Proje Adı tek satırdır.
+                   ' Böylece aynı proje adı aynı müdürlükte birden fazla KOKPİT satırında/PROJECT_CODE altında gelirse aylık tutarlar toplanır.
+                   key = mudurluk & "|" & NormalizeProjectNameKey(projeAdi)
+               Else
+                   ' Aynı Birim + Proje tek satır.
+                   ' Aynı proje farklı birimdeyse ayrı satır.
+                   key = birim & "|" & proje
+               End If
 
                If Not dict.Exists(key) Then
 
@@ -557,7 +660,13 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
        wsOzet.Cells(satir, "G").Value = arr(5) ' Proje Adı
        wsOzet.Cells(satir, "H").Value = ""
        wsOzet.Cells(satir, "I").Value = arr(1) ' Başkanlık
-       wsOzet.Cells(satir, "J").Value = ""
+       If mudurlukBazliOzet And Not dictMudurlukProjeButce Is Nothing Then
+           wsOzet.Cells(satir, "J").Value = GetMudurlukProjeButceFromDict(dictMudurlukProjeButce, arr(2), arr(5))
+       ElseIf Not dictProjeButce Is Nothing Then
+           wsOzet.Cells(satir, "J").Value = GetProjeButceFromDict(dictProjeButce, arr(4), arr(5))
+       Else
+           wsOzet.Cells(satir, "J").Value = ""
+       End If
 
        toplam = 0#
 
@@ -603,12 +712,14 @@ Private Sub CreateIsletmeKullanimOzeti(ByVal wsVeriSeti As Worksheet, _
 
        wsOzet.Range("J1:X1").Font.Bold = True
 
-       ' Müdürlük / Birim / Proje bazında sıralama
        With wsOzet.Sort
            .SortFields.Clear
-           .SortFields.Add key:=wsOzet.Range("C3:C" & lastOzetRow), Order:=xlAscending
+
+           ' Tüm özetlerde Birim sütunu A-Z sıralanır; ardından Müdürlük ve Proje gelir.
            .SortFields.Add key:=wsOzet.Range("D3:D" & lastOzetRow), Order:=xlAscending
+           .SortFields.Add key:=wsOzet.Range("C3:C" & lastOzetRow), Order:=xlAscending
            .SortFields.Add key:=wsOzet.Range("F3:F" & lastOzetRow), Order:=xlAscending
+
            .SetRange wsOzet.Range("A2:X" & lastOzetRow)
            .Header = xlYes
            .Apply
@@ -638,7 +749,588 @@ End Sub
 
 
 
+Private Sub CreateGiderAdiTasnifliIsletmeDosyalari(ByVal wsTedarik As Worksheet, _
+                                                       ByVal ciktiKlasoru As String, _
+                                                       ByVal tarihMetni As String, _
+                                                       ByVal butceTalepleriDosyaYolu As String, _
+                                                       ByVal projeBilgiDosyaYolu As String)
 
+   Dim wbButceTalepleri As Workbook
+   Dim wbProjeBilgi As Workbook
+   Dim wbTemp As Workbook
+   Dim wsButceKaynak As Worksheet
+   Dim wsProjeBilgi As Worksheet
+   Dim wsVeriSeti As Worksheet
+   Dim dictGiderAdi As Object
+   Dim dictProjeGiderAdi As Object
+   Dim dictProjectFinName As Object
+   Dim gerceklesenDosyaYolu As String
+   Dim talepDosyaYolu As String
+
+   Set wbButceTalepleri = Workbooks.Open(butceTalepleriDosyaYolu, ReadOnly:=True)
+   Set wsButceKaynak = FindWorksheetWithHeaders(wbButceTalepleri, Array("Gider Adı"))
+
+   If wsButceKaynak Is Nothing Then
+       Err.Raise vbObjectError + 1401, , "Bütçe Talepleri dosyasında 'Gider Adı' sütununu içeren çalışma sayfası bulunamadı."
+   End If
+
+   Set dictGiderAdi = BuildGiderAdiListDict(wsButceKaynak)
+   Set dictProjeGiderAdi = BuildButceTalepleriProjeGiderDict(wsButceKaynak)
+
+   Set wbProjeBilgi = Workbooks.Open(projeBilgiDosyaYolu, ReadOnly:=True)
+   Set wsProjeBilgi = wbProjeBilgi.Worksheets(1)
+   Set dictProjectFinName = BuildProjectFinNameDict(wsProjeBilgi)
+
+   Set wbTemp = Workbooks.Add(xlWBATWorksheet)
+   Set wsVeriSeti = wbTemp.Worksheets(1)
+   PrepareKokpitVeriSeti wsTedarik, wsVeriSeti, "IPTSHUMA"
+
+   gerceklesenDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
+       "03- Gider Adı Tasnifli Gerçekleşen İşletme Bütçe Kullanım Durum Özeti - " & tarihMetni & ".xlsx"
+
+   talepDosyaYolu = ciktiKlasoru & Application.PathSeparator & _
+       "03- Gider Adı Tasnifli Talep İşletme Bütçe Kullanım Durum Özeti - " & tarihMetni & ".xlsx"
+
+   CreateGiderAdiTasnifliDosya wsVeriSeti, dictGiderAdi, dictProjeGiderAdi, dictProjectFinName, gerceklesenDosyaYolu, False, "Gerçekleşme", "Toplam Gerçekleşme"
+   CreateGiderAdiTasnifliDosya wsVeriSeti, dictGiderAdi, dictProjeGiderAdi, dictProjectFinName, talepDosyaYolu, True, "Talep", "Toplam Talep"
+
+   wbTemp.Close SaveChanges:=False
+   wbProjeBilgi.Close SaveChanges:=False
+   wbButceTalepleri.Close SaveChanges:=False
+
+End Sub
+
+Private Sub CreateGiderAdiTasnifliDosya(ByVal wsVeriSeti As Worksheet, _
+                                        ByVal dictGiderAdi As Object, _
+                                        ByVal dictProjeGiderAdi As Object, _
+                                        ByVal dictProjectFinName As Object, _
+                                        ByVal dosyaYolu As String, _
+                                        ByVal humaStatuleriDahil As Boolean, _
+                                        ByVal actualHeader As String, _
+                                        ByVal totalActualHeader As String)
+
+   Dim wbYeni As Workbook
+   Dim wsBolum As Worksheet
+   Dim dictBolumler As Object
+   Dim dictTutarlar As Object
+   Dim bolumKey As Variant
+   Dim giderKey As Variant
+   Dim sheetName As String
+   Dim rowNo As Long
+   Dim totalRow As Long
+   Dim monthNo As Long
+   Dim budgetCol As Long
+   Dim actualCol As Long
+   Dim tutarKey As String
+   Dim budgetTotalFormula As String
+   Dim actualTotalFormula As String
+   Dim aylar As Variant
+   Dim lastDataRow As Long
+
+   Set dictBolumler = BuildTasnifliBolumDict(wsVeriSeti, humaStatuleriDahil)
+   Set dictTutarlar = BuildTasnifliTutarDict(wsVeriSeti, humaStatuleriDahil, dictProjeGiderAdi, dictProjectFinName)
+
+   Set wbYeni = Workbooks.Add(xlWBATWorksheet)
+
+   If dictBolumler.Count = 0 Then
+       wbYeni.Worksheets(1).Name = "Veri Yok"
+   Else
+       Do While wbYeni.Worksheets.Count < dictBolumler.Count
+           wbYeni.Worksheets.Add After:=wbYeni.Worksheets(wbYeni.Worksheets.Count)
+       Loop
+
+       Do While wbYeni.Worksheets.Count > dictBolumler.Count
+           wbYeni.Worksheets(wbYeni.Worksheets.Count).Delete
+       Loop
+
+       aylar = Array("Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran", "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık")
+
+       For Each bolumKey In dictBolumler.Keys
+           Set wsBolum = wbYeni.Worksheets(CLng(dictBolumler(bolumKey)))
+           sheetName = GetUniqueWorksheetName(wbYeni, CleanWorksheetName(CStr(bolumKey)), wsBolum)
+           wsBolum.Name = sheetName
+           wsBolum.Cells.Clear
+
+           wsBolum.Range("A1").Value = CStr(bolumKey)
+           wsBolum.Range("A2").Value = ""
+
+           For monthNo = 1 To 12
+               budgetCol = 2 + ((monthNo - 1) * 2)
+               actualCol = budgetCol + 1
+               wsBolum.Cells(1, budgetCol).Value = aylar(monthNo - 1)
+               wsBolum.Cells(1, actualCol).Value = aylar(monthNo - 1)
+               wsBolum.Cells(2, budgetCol).Value = "Bütçe"
+               wsBolum.Cells(2, actualCol).Value = actualHeader
+           Next monthNo
+
+           With wsBolum.Range("Z1:AA1")
+               .Merge
+               .Value = "TOPLAM"
+               .HorizontalAlignment = xlCenter
+           End With
+           wsBolum.Range("Z2").Value = "Toplam Bütçe"
+           wsBolum.Range("AA2").Value = totalActualHeader
+
+           rowNo = 3
+           For Each giderKey In dictGiderAdi.Keys
+               wsBolum.Cells(rowNo, 1).Value = CStr(giderKey)
+
+               For monthNo = 1 To 12
+                   actualCol = 3 + ((monthNo - 1) * 2)
+                   tutarKey = NormalizeText(CStr(bolumKey)) & "|" & NormalizeText(CStr(giderKey)) & "|" & CStr(monthNo)
+
+                   If dictTutarlar.Exists(tutarKey) Then
+                       wsBolum.Cells(rowNo, actualCol).Value = dictTutarlar(tutarKey)
+                   Else
+                       wsBolum.Cells(rowNo, actualCol).Value = 0
+                   End If
+               Next monthNo
+
+               budgetTotalFormula = "=SUM(B" & rowNo & ",D" & rowNo & ",F" & rowNo & ",H" & rowNo & ",J" & rowNo & ",L" & rowNo & ",N" & rowNo & ",P" & rowNo & ",R" & rowNo & ",T" & rowNo & ",V" & rowNo & ",X" & rowNo & ")"
+               actualTotalFormula = "=SUM(C" & rowNo & ",E" & rowNo & ",G" & rowNo & ",I" & rowNo & ",K" & rowNo & ",M" & rowNo & ",O" & rowNo & ",Q" & rowNo & ",S" & rowNo & ",U" & rowNo & ",W" & rowNo & ",Y" & rowNo & ")"
+               wsBolum.Cells(rowNo, 26).Formula = budgetTotalFormula
+               wsBolum.Cells(rowNo, 27).Formula = actualTotalFormula
+
+               rowNo = rowNo + 1
+           Next giderKey
+
+           lastDataRow = rowNo - 1
+           totalRow = rowNo
+
+           ApplyUsdAccountingFormat wsBolum, 3, lastDataRow, 2, 27
+
+           For monthNo = 1 To 12
+               budgetCol = 2 + ((monthNo - 1) * 2)
+               actualCol = budgetCol + 1
+
+               With wsBolum.Range(wsBolum.Cells(totalRow, budgetCol), wsBolum.Cells(totalRow, actualCol))
+                   .Merge
+                   If lastDataRow >= 3 Then
+                       .Cells(1, 1).Formula = "=IFERROR(SUM(" & wsBolum.Range(wsBolum.Cells(3, actualCol), wsBolum.Cells(lastDataRow, actualCol)).Address(False, False) & ")/SUM(" & wsBolum.Range(wsBolum.Cells(3, budgetCol), wsBolum.Cells(lastDataRow, budgetCol)).Address(False, False) & "),0)"
+                   Else
+                       .Cells(1, 1).Value = ""
+                   End If
+                   .NumberFormat = "0.00%"
+                   .Font.Bold = True
+                   .HorizontalAlignment = xlCenter
+               End With
+           Next monthNo
+
+           With wsBolum.Range(wsBolum.Cells(totalRow, 26), wsBolum.Cells(totalRow, 27))
+               .Merge
+               If lastDataRow >= 3 Then
+                   .Cells(1, 1).Formula = "=IFERROR(SUM(" & wsBolum.Range(wsBolum.Cells(3, 27), wsBolum.Cells(lastDataRow, 27)).Address(False, False) & ")/SUM(" & wsBolum.Range(wsBolum.Cells(3, 26), wsBolum.Cells(lastDataRow, 26)).Address(False, False) & "),0)"
+               Else
+                   .Cells(1, 1).Value = ""
+               End If
+               .NumberFormat = "0.00%"
+               .Font.Bold = True
+               .HorizontalAlignment = xlCenter
+           End With
+
+           wsBolum.Range(wsBolum.Cells(1, 1), wsBolum.Cells(2, 27)).Font.Bold = True
+           wsBolum.Range(wsBolum.Cells(1, 1), wsBolum.Cells(totalRow, 27)).Borders.LineStyle = xlContinuous
+           wsBolum.Columns.AutoFit
+       Next bolumKey
+   End If
+
+   SortWorksheetsAZ wbYeni
+
+   wbYeni.SaveAs Filename:=dosyaYolu, FileFormat:=xlOpenXMLWorkbook
+   wbYeni.Close SaveChanges:=False
+
+End Sub
+
+Private Function BuildTasnifliBolumDict(ByVal wsVeriSeti As Worksheet, ByVal humaStatuleriDahil As Boolean) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colBolum As Long
+   Dim colStatu As Long
+   Dim i As Long
+   Dim bolum As String
+   Dim statu As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+   dict.Add "0V4", 1
+
+   headerRow = 1
+   colBolum = FindHeaderCol(wsVeriSeti, headerRow, Array("Talep Eden Bölüm", "Talep Eden Bolum"))
+   colStatu = FindHeaderCol(wsVeriSeti, headerRow, Array("Statü", "Statu", "Durum", "Talep Statüsü", "Talep Statusu", "Tedarik Statüsü", "Tedarik Statusu"))
+
+   If colBolum = 0 Then Err.Raise vbObjectError + 1402, , "KOKPİT veri setinde 'Talep Eden Bölüm' sütunu bulunamadı."
+   If colStatu = 0 Then Err.Raise vbObjectError + 1403, , "KOKPİT veri setinde 'Statü' sütunu bulunamadı."
+
+   lastRow = LastUsedRow(wsVeriSeti)
+
+   For i = headerRow + 1 To lastRow
+       statu = CStr(wsVeriSeti.Cells(i, colStatu).Value)
+
+       If IsIsletmeOzetStatus(statu, humaStatuleriDahil) Then
+           bolum = Trim(CStr(wsVeriSeti.Cells(i, colBolum).Value))
+           If Len(bolum) > 0 Then
+               If Not dict.Exists(bolum) Then dict.Add bolum, dict.Count + 1
+           End If
+       End If
+   Next i
+
+   Set BuildTasnifliBolumDict = dict
+
+End Function
+
+Private Function BuildTasnifliTutarDict(ByVal wsVeriSeti As Worksheet, _
+                                      ByVal humaStatuleriDahil As Boolean, _
+                                      ByVal dictProjeGiderAdi As Object, _
+                                      ByVal dictProjectFinName As Object) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colBolum As Long
+   Dim colProje As Long
+   Dim colGiderAdi As Long
+   Dim colStatu As Long
+   Dim colGirisTarihi As Long
+   Dim colTalepToplamUSD As Long
+   Dim i As Long
+   Dim bolum As String
+   Dim projeKodu As String
+   Dim projectFinName As String
+   Dim giderAdi As String
+   Dim giderAdlari As String
+   Dim giderParcalari As Variant
+   Dim giderItem As Variant
+   Dim statu As String
+   Dim ayNo As Integer
+   Dim tutar As Double
+   Dim key As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   headerRow = 1
+   colBolum = FindHeaderCol(wsVeriSeti, headerRow, Array("Talep Eden Bölüm", "Talep Eden Bolum"))
+   colProje = FindHeaderCol(wsVeriSeti, headerRow, Array("Proje", "Proje Kodu", "Proje Kod"))
+   colGiderAdi = FindHeaderCol(wsVeriSeti, headerRow, Array("Gider Adı", "Gider Adi", "Gider", "Hesap Adı", "Hesap Adi", "Masraf Kalemi", "Harcama Kalemi", "Kategori", "Kategori Adı", "Kategori Adi"))
+   colStatu = FindHeaderCol(wsVeriSeti, headerRow, Array("Statü", "Statu", "Durum", "Talep Statüsü", "Talep Statusu", "Tedarik Statüsü", "Tedarik Statusu"))
+   colGirisTarihi = FindHeaderCol(wsVeriSeti, headerRow, Array("Giriş Tarihi", "Giris Tarihi"))
+   colTalepToplamUSD = FindHeaderCol(wsVeriSeti, headerRow, Array("Talep Toplam USD"))
+
+   If colBolum = 0 Then Err.Raise vbObjectError + 1404, , "KOKPİT veri setinde 'Talep Eden Bölüm' sütunu bulunamadı."
+   If colProje = 0 Then Err.Raise vbObjectError + 1405, , "KOKPİT veri setinde 'Proje' sütunu bulunamadı."
+   If colStatu = 0 Then Err.Raise vbObjectError + 1406, , "KOKPİT veri setinde 'Statü' sütunu bulunamadı."
+   If colGirisTarihi = 0 Then Err.Raise vbObjectError + 1407, , "KOKPİT veri setinde 'Giriş Tarihi' sütunu bulunamadı."
+   If colTalepToplamUSD = 0 Then Err.Raise vbObjectError + 1408, , "KOKPİT veri setinde 'Talep Toplam USD' sütunu bulunamadı."
+
+   lastRow = LastUsedRow(wsVeriSeti)
+
+   For i = headerRow + 1 To lastRow
+       statu = CStr(wsVeriSeti.Cells(i, colStatu).Value)
+
+       If IsIsletmeOzetStatus(statu, humaStatuleriDahil) Then
+           ayNo = GetMonthNoFromValue(wsVeriSeti.Cells(i, colGirisTarihi).Value)
+
+           If ayNo >= 1 And ayNo <= 12 Then
+               bolum = Trim(CStr(wsVeriSeti.Cells(i, colBolum).Value))
+               projeKodu = NormalizeProjectCode(wsVeriSeti.Cells(i, colProje).Value)
+               projectFinName = GetProjectFinNameFromDict(dictProjectFinName, projeKodu)
+               giderAdlari = GetGiderAdlariFromProjectDict(dictProjeGiderAdi, projectFinName)
+
+               If Len(giderAdlari) = 0 And colGiderAdi > 0 Then
+                   giderAdlari = Trim(CStr(wsVeriSeti.Cells(i, colGiderAdi).Value))
+               End If
+
+               tutar = ToDoubleSafe(wsVeriSeti.Cells(i, colTalepToplamUSD).Value)
+
+               If Len(bolum) > 0 And Len(giderAdlari) > 0 Then
+                   giderParcalari = Split(giderAdlari, Chr(30))
+                   For Each giderItem In giderParcalari
+                       giderAdi = Trim(CStr(giderItem))
+                       If Len(giderAdi) > 0 Then
+                           key = NormalizeText(bolum) & "|" & NormalizeText(giderAdi) & "|" & CStr(ayNo)
+                           AddToDict dict, key, tutar
+
+                           key = NormalizeText("0V4") & "|" & NormalizeText(giderAdi) & "|" & CStr(ayNo)
+                           AddToDict dict, key, tutar
+                       End If
+                   Next giderItem
+               End If
+           End If
+       End If
+   Next i
+
+   Set BuildTasnifliTutarDict = dict
+
+End Function
+
+Private Function BuildGiderAdiListDict(ByVal wsButceKaynak As Worksheet) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colGiderAdi As Long
+   Dim i As Long
+   Dim giderAdi As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   headerRow = FindHeaderRow(wsButceKaynak, Array("Gider Adı", "Gider Adi"))
+   If headerRow = 0 Then Err.Raise vbObjectError + 1409, , "Bütçe Talepleri dosyasında 'Gider Adı' başlığı bulunamadı."
+
+   colGiderAdi = FindHeaderCol(wsButceKaynak, headerRow, Array("Gider Adı", "Gider Adi"))
+   If colGiderAdi = 0 Then Err.Raise vbObjectError + 1410, , "Bütçe Talepleri dosyasında 'Gider Adı' sütunu bulunamadı."
+
+   lastRow = LastUsedRow(wsButceKaynak)
+
+   For i = headerRow + 1 To lastRow
+       giderAdi = Trim(CStr(wsButceKaynak.Cells(i, colGiderAdi).Value))
+
+       If Len(giderAdi) > 0 Then
+           If Not dict.Exists(giderAdi) Then dict.Add giderAdi, True
+       End If
+   Next i
+
+   Set BuildGiderAdiListDict = dict
+
+End Function
+
+Private Function BuildButceTalepleriProjeGiderDict(ByVal wsButceKaynak As Worksheet) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colProje As Long
+   Dim colGiderAdi As Long
+   Dim i As Long
+   Dim projeAdi As String
+   Dim giderAdi As String
+   Dim key As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   headerRow = FindHeaderRow(wsButceKaynak, Array("Proje", "Proje Adı", "Proje Adi"))
+   If headerRow = 0 Then
+       Set BuildButceTalepleriProjeGiderDict = dict
+       Exit Function
+   End If
+
+   colProje = FindHeaderCol(wsButceKaynak, headerRow, Array("Proje", "Proje Adı", "Proje Adi"))
+   colGiderAdi = FindHeaderCol(wsButceKaynak, headerRow, Array("Gider Adı", "Gider Adi"))
+
+   If colProje = 0 Or colGiderAdi = 0 Then
+       Set BuildButceTalepleriProjeGiderDict = dict
+       Exit Function
+   End If
+
+   lastRow = LastUsedRow(wsButceKaynak)
+
+   For i = headerRow + 1 To lastRow
+       projeAdi = Trim(CStr(wsButceKaynak.Cells(i, colProje).Value))
+       giderAdi = Trim(CStr(wsButceKaynak.Cells(i, colGiderAdi).Value))
+       key = NormalizeProjectNameKey(projeAdi)
+
+       If Len(key) > 0 And Len(giderAdi) > 0 Then
+           AddGiderAdiToProjectDict dict, key, giderAdi
+       End If
+   Next i
+
+   Set BuildButceTalepleriProjeGiderDict = dict
+
+End Function
+
+Private Sub AddGiderAdiToProjectDict(ByVal dict As Object, ByVal key As String, ByVal giderAdi As String)
+
+   Dim mevcut As String
+   Dim parcalar As Variant
+   Dim p As Variant
+
+   If dict.Exists(key) Then
+       mevcut = CStr(dict(key))
+       parcalar = Split(mevcut, Chr(30))
+
+       For Each p In parcalar
+           If NormalizeText(CStr(p)) = NormalizeText(giderAdi) Then Exit Sub
+       Next p
+
+       dict(key) = mevcut & Chr(30) & giderAdi
+   Else
+       dict.Add key, giderAdi
+   End If
+
+End Sub
+
+Private Function BuildProjectFinNameDict(ByVal wsProjeBilgi As Worksheet) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colProjectCode As Long
+   Dim colProjectFinName As Long
+   Dim i As Long
+   Dim projectCode As String
+   Dim projectFinName As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   headerRow = FindHeaderRow(wsProjeBilgi, Array("PROJECT_CODE", "Proje Kodu", "Proje Kod"))
+   If headerRow = 0 Then
+       Set BuildProjectFinNameDict = dict
+       Exit Function
+   End If
+
+   colProjectCode = FindHeaderCol(wsProjeBilgi, headerRow, Array("PROJECT_CODE", "Proje Kodu", "Proje Kod"))
+   colProjectFinName = FindHeaderCol(wsProjeBilgi, headerRow, Array("PROJECT_FIN_NAME", "Proje Finans Adı", "Proje Finans Adi", "Proje Adı", "Proje Adi"))
+
+   If colProjectCode = 0 Or colProjectFinName = 0 Then
+       Set BuildProjectFinNameDict = dict
+       Exit Function
+   End If
+
+   lastRow = LastUsedRow(wsProjeBilgi)
+
+   For i = headerRow + 1 To lastRow
+       projectCode = NormalizeProjectCode(wsProjeBilgi.Cells(i, colProjectCode).Value)
+       projectFinName = Trim(CStr(wsProjeBilgi.Cells(i, colProjectFinName).Value))
+
+       If Len(projectCode) > 0 And Len(projectFinName) > 0 Then
+           If Not dict.Exists(projectCode) Then dict.Add projectCode, projectFinName
+       End If
+   Next i
+
+   Set BuildProjectFinNameDict = dict
+
+End Function
+
+Private Function GetProjectFinNameFromDict(ByVal dictProjectFinName As Object, ByVal projeKodu As String) As String
+
+   Dim key As String
+
+   key = NormalizeProjectCode(projeKodu)
+
+   If Not dictProjectFinName Is Nothing Then
+       If dictProjectFinName.Exists(key) Then
+           GetProjectFinNameFromDict = CStr(dictProjectFinName(key))
+           Exit Function
+       End If
+   End If
+
+   GetProjectFinNameFromDict = key
+
+End Function
+
+Private Function GetGiderAdlariFromProjectDict(ByVal dictProjeGiderAdi As Object, ByVal projectFinName As String) As String
+
+   Dim key As String
+
+   key = NormalizeProjectNameKey(projectFinName)
+
+   If Not dictProjeGiderAdi Is Nothing Then
+       If dictProjeGiderAdi.Exists(key) Then
+           GetGiderAdlariFromProjectDict = CStr(dictProjeGiderAdi(key))
+           Exit Function
+       End If
+   End If
+
+   GetGiderAdlariFromProjectDict = ""
+
+End Function
+
+Private Sub ApplyUsdAccountingFormat(ByVal ws As Worksheet, _
+                                     ByVal firstRow As Long, _
+                                     ByVal lastRow As Long, _
+                                     ByVal firstCol As Long, _
+                                     ByVal lastCol As Long)
+
+   If ws Is Nothing Then Exit Sub
+   If firstRow > lastRow Then Exit Sub
+   If firstCol <= 0 Or lastCol <= 0 Then Exit Sub
+
+   ws.Range(ws.Cells(firstRow, firstCol), ws.Cells(lastRow, lastCol)).NumberFormat = GetUsdAccountingFormat()
+
+End Sub
+
+Private Function GetUsdAccountingFormat() As String
+
+   GetUsdAccountingFormat = "_([$USD-409]* #,##0.00_);_([$USD-409]* (#,##0.00);_([$USD-409]* ""-""??_);_(@_)"
+
+End Function
+
+Private Sub SortWorksheetsAZ(ByVal wb As Workbook)
+
+   Dim i As Long
+   Dim j As Long
+
+   If wb Is Nothing Then Exit Sub
+
+   For i = 1 To wb.Worksheets.Count - 1
+       For j = i + 1 To wb.Worksheets.Count
+           If NormalizeText(wb.Worksheets(j).Name) < NormalizeText(wb.Worksheets(i).Name) Then
+               wb.Worksheets(j).Move Before:=wb.Worksheets(i)
+           End If
+       Next j
+   Next i
+
+End Sub
+
+Private Function CleanWorksheetName(ByVal valueIn As Variant) As String
+
+   Dim s As String
+
+   s = Trim(CStr(valueIn))
+   s = Replace(s, ":", " ")
+   s = Replace(s, "\", " ")
+   s = Replace(s, "/", " ")
+   s = Replace(s, "?", " ")
+   s = Replace(s, "*", " ")
+   s = Replace(s, "[", " ")
+   s = Replace(s, "]", " ")
+
+   Do While InStr(s, "  ") > 0
+       s = Replace(s, "  ", " ")
+   Loop
+
+   If Len(s) = 0 Then s = "Bölüm"
+   If Len(s) > 31 Then s = Left(s, 31)
+
+   CleanWorksheetName = s
+
+End Function
+
+Private Function GetUniqueWorksheetName(ByVal wb As Workbook, ByVal baseName As String, ByVal wsCurrent As Worksheet) As String
+
+   Dim candidate As String
+   Dim counter As Long
+   Dim suffix As String
+
+   candidate = CleanWorksheetName(baseName)
+   counter = 1
+
+   Do While WorksheetNameExists(wb, candidate, wsCurrent)
+       counter = counter + 1
+       suffix = "_" & CStr(counter)
+       candidate = Left(CleanWorksheetName(baseName), 31 - Len(suffix)) & suffix
+   Loop
+
+   GetUniqueWorksheetName = candidate
+
+End Function
+
+Private Function WorksheetNameExists(ByVal wb As Workbook, ByVal sheetName As String, ByVal wsCurrent As Worksheet) As Boolean
+
+   Dim ws As Worksheet
+
+   If wb Is Nothing Then Exit Function
+
+   For Each ws In wb.Worksheets
+       If Not ws Is wsCurrent Then
+           If NormalizeText(ws.Name) = NormalizeText(sheetName) Then
+               WorksheetNameExists = True
+               Exit Function
+           End If
+       End If
+   Next ws
+
+End Function
 
 Private Sub PrepareKokpitVeriSeti(ByVal wsKaynak As Worksheet, _
                                  ByVal wsHedef As Worksheet, _
@@ -850,6 +1542,24 @@ Private Function CleanTalepEdenBolum(ByVal valueIn As Variant) As String
 
 End Function
 
+Private Function NormalizeMudurlukKodu(ByVal valueIn As Variant) As String
+
+   Dim s As String
+
+   s = CleanTalepEdenBolum(valueIn)
+
+   If Len(s) >= 3 Then
+       NormalizeMudurlukKodu = Left(s, 3)
+   ElseIf Len(s) = 2 Then
+       NormalizeMudurlukKodu = s & "0"
+   ElseIf Len(s) = 1 Then
+       NormalizeMudurlukKodu = s & "00"
+   Else
+       NormalizeMudurlukKodu = ""
+   End If
+
+End Function
+
 Private Function GetMonthNoFromValue(ByVal valueIn As Variant) As Integer
 
    Dim s As String
@@ -969,7 +1679,415 @@ Private Function EnsureBudgetUsageFolder(ByVal baseFolder As String, ByVal tarih
 
 End Function
 
+Private Function FindWorksheetWithHeaders(ByVal wb As Workbook, ByVal requiredHeaders As Variant) As Worksheet
+
+   Dim ws As Worksheet
+   Dim headerRow As Long
+   Dim h As Variant
+   Dim tumBasliklarVar As Boolean
+
+   If wb Is Nothing Then Exit Function
+
+   For Each ws In wb.Worksheets
+       headerRow = FindHeaderRow(ws, requiredHeaders)
+       If headerRow > 0 Then
+           tumBasliklarVar = True
+           For Each h In requiredHeaders
+               If FindHeaderCol(ws, headerRow, Array(CStr(h))) = 0 Then
+                   tumBasliklarVar = False
+                   Exit For
+               End If
+           Next h
+
+           If tumBasliklarVar Then
+               Set FindWorksheetWithHeaders = ws
+               Exit Function
+           End If
+       End If
+   Next ws
+
+   Set FindWorksheetWithHeaders = Nothing
+
+End Function
+
+Private Function BuildKullanilacakButceTipleriDict(ByVal wsButceTipleri As Worksheet) As Object
+
+   Dim dict As Object
+   Dim lastRow As Long
+   Dim i As Long
+   Dim giderAdi As String
+   Dim grup As String
+   Dim key As String
+
+   Set dict = CreateObject("Scripting.Dictionary")
+   lastRow = LastUsedRow(wsButceTipleri)
+
+   For i = 1 To lastRow
+       giderAdi = Trim(CStr(wsButceTipleri.Cells(i, "A").Value))
+       grup = Trim(CStr(wsButceTipleri.Cells(i, "B").Value))
+
+       If Len(giderAdi) > 0 Or Len(grup) > 0 Then
+           If IsGreenFont(wsButceTipleri.Cells(i, "A")) Or IsGreenFont(wsButceTipleri.Cells(i, "B")) Then
+               key = NormalizeText(giderAdi) & "|" & NormalizeText(grup)
+               If Not dict.Exists(key) Then dict.Add key, True
+           End If
+       End If
+   Next i
+
+   Set BuildKullanilacakButceTipleriDict = dict
+
+End Function
+
+Private Function BuildProjeButceDict(ByVal wsButceKaynak As Worksheet, _
+                                      ByVal dictKullanilacakButceTipleri As Object, _
+                                      ByVal dictProjeAdi As Object) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colProje As Long
+   Dim colGiderAdi As Long
+   Dim colGrup As Long
+   Dim colToplamUsd As Long
+   Dim i As Long
+   Dim projeDegeri As String
+   Dim projeKodu As String
+   Dim giderAdi As String
+   Dim grup As String
+   Dim lastProjeDegeri As String
+   Dim lastGiderAdi As String
+   Dim lastGrup As String
+   Dim key As String
+   Dim projeAdiKey As String
+   Dim tutar As Double
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   If wsButceKaynak Is Nothing Then
+       Set BuildProjeButceDict = dict
+       Exit Function
+   End If
+
+   If dictKullanilacakButceTipleri Is Nothing Then
+       Set dictKullanilacakButceTipleri = CreateObject("Scripting.Dictionary")
+   End If
+
+   headerRow = FindHeaderRow(wsButceKaynak, Array("Proje", "Proje Adı", "Proje Adi", "Proje Kodu", "Proje Kod"))
+   If headerRow = 0 Then Err.Raise vbObjectError + 1327, , "Bütçe Talepleri kaynak sayfasında 'Proje' başlığı bulunamadı."
+
+   colProje = FindHeaderCol(wsButceKaynak, headerRow, Array("Proje", "Proje Adı", "Proje Adi", "Proje Kodu", "Proje Kod"))
+   colGiderAdi = FindHeaderCol(wsButceKaynak, headerRow, Array("Gider Adı", "Gider Adi"))
+   colGrup = FindHeaderCol(wsButceKaynak, headerRow, Array("Grup"))
+   colToplamUsd = FindHeaderCol(wsButceKaynak, headerRow, Array("Toplam USD", "Toplam USD Bütçe", "Toplam USD Butce"))
+
+   If colProje = 0 Then Err.Raise vbObjectError + 1328, , "Bütçe Talepleri kaynak sayfasında 'Proje' sütunu bulunamadı."
+   If colGiderAdi = 0 Then Err.Raise vbObjectError + 1329, , "Bütçe Talepleri kaynak sayfasında 'Gider Adı' sütunu bulunamadı."
+   If colGrup = 0 Then Err.Raise vbObjectError + 1330, , "Bütçe Talepleri kaynak sayfasında 'Grup' sütunu bulunamadı."
+   If colToplamUsd = 0 Then Err.Raise vbObjectError + 1331, , "Bütçe Talepleri kaynak sayfasında 'Toplam USD' sütunu bulunamadı."
+
+   lastRow = LastUsedRow(wsButceKaynak)
+
+   For i = headerRow + 1 To lastRow
+       projeDegeri = Trim(CStr(wsButceKaynak.Cells(i, colProje).Value))
+       giderAdi = Trim(CStr(wsButceKaynak.Cells(i, colGiderAdi).Value))
+       grup = Trim(CStr(wsButceKaynak.Cells(i, colGrup).Value))
+
+       If Len(projeDegeri) > 0 Then lastProjeDegeri = projeDegeri Else projeDegeri = lastProjeDegeri
+       If Len(giderAdi) > 0 Then lastGiderAdi = giderAdi Else giderAdi = lastGiderAdi
+       If Len(grup) > 0 Then lastGrup = grup Else grup = lastGrup
+
+       projeKodu = ResolveProjeButceKey(projeDegeri, dictProjeAdi)
+       key = NormalizeText(giderAdi) & "|" & NormalizeText(grup)
+
+       If Len(projeKodu) > 0 Then
+           If dictKullanilacakButceTipleri.Exists(key) Then
+               tutar = ToDoubleSafe(wsButceKaynak.Cells(i, colToplamUsd).Value)
+               projeAdiKey = NormalizeProjectNameKey(projeDegeri)
+
+               AddToDict dict, projeKodu, tutar
+
+               If Len(projeAdiKey) > 0 And projeAdiKey <> NormalizeText(projeKodu) Then
+                   AddToDict dict, projeAdiKey, tutar
+               End If
+           End If
+       End If
+   Next i
+
+   Set BuildProjeButceDict = dict
+
+End Function
+
+Private Function BuildMudurlukProjeButceDict(ByVal wsButceKaynak As Worksheet, _
+                                             ByVal dictKullanilacakButceTipleri As Object) As Object
+
+   Dim dict As Object
+   Dim headerRow As Long
+   Dim lastRow As Long
+   Dim colProje As Long
+   Dim colDeptNo As Long
+   Dim colGiderAdi As Long
+   Dim colGrup As Long
+   Dim colToplamUsd As Long
+   Dim i As Long
+   Dim projeAdi As String
+   Dim deptNo As String
+   Dim mudurluk As String
+   Dim giderAdi As String
+   Dim grup As String
+   Dim lastProjeAdi As String
+   Dim lastDeptNo As String
+   Dim lastGiderAdi As String
+   Dim lastGrup As String
+   Dim kullanilacakKey As String
+   Dim butceKey As String
+   Dim tutar As Double
+
+   Set dict = CreateObject("Scripting.Dictionary")
+
+   If wsButceKaynak Is Nothing Then
+       Set BuildMudurlukProjeButceDict = dict
+       Exit Function
+   End If
+
+   If dictKullanilacakButceTipleri Is Nothing Then
+       Set dictKullanilacakButceTipleri = CreateObject("Scripting.Dictionary")
+   End If
+
+   headerRow = FindHeaderRow(wsButceKaynak, Array("Proje", "Proje Adı", "Proje Adi", "Dept. No", "Dept No"))
+   If headerRow = 0 Then
+       Set BuildMudurlukProjeButceDict = dict
+       Exit Function
+   End If
+
+   colProje = FindHeaderCol(wsButceKaynak, headerRow, Array("Proje", "Proje Adı", "Proje Adi"))
+   colDeptNo = FindHeaderCol(wsButceKaynak, headerRow, Array("Dept. No", "Dept No", "Dept", "Departman No"))
+   colGiderAdi = FindHeaderCol(wsButceKaynak, headerRow, Array("Gider Adı", "Gider Adi"))
+   colGrup = FindHeaderCol(wsButceKaynak, headerRow, Array("Grup"))
+   colToplamUsd = FindHeaderCol(wsButceKaynak, headerRow, Array("Toplam USD", "Toplam USD Bütçe", "Toplam USD Butce"))
+
+   If colProje = 0 Or colDeptNo = 0 Or colGiderAdi = 0 Or colGrup = 0 Or colToplamUsd = 0 Then
+       Set BuildMudurlukProjeButceDict = dict
+       Exit Function
+   End If
+
+   lastRow = LastUsedRow(wsButceKaynak)
+
+   For i = headerRow + 1 To lastRow
+       projeAdi = Trim(CStr(wsButceKaynak.Cells(i, colProje).Value))
+       deptNo = Trim(CStr(wsButceKaynak.Cells(i, colDeptNo).Value))
+       giderAdi = Trim(CStr(wsButceKaynak.Cells(i, colGiderAdi).Value))
+       grup = Trim(CStr(wsButceKaynak.Cells(i, colGrup).Value))
+
+       If Len(projeAdi) > 0 Then lastProjeAdi = projeAdi Else projeAdi = lastProjeAdi
+       If Len(deptNo) > 0 Then lastDeptNo = deptNo Else deptNo = lastDeptNo
+       If Len(giderAdi) > 0 Then lastGiderAdi = giderAdi Else giderAdi = lastGiderAdi
+       If Len(grup) > 0 Then lastGrup = grup Else grup = lastGrup
+
+       mudurluk = NormalizeMudurlukKodu(deptNo)
+       kullanilacakKey = NormalizeText(giderAdi) & "|" & NormalizeText(grup)
+
+       If Len(mudurluk) > 0 And Len(projeAdi) > 0 Then
+           If dictKullanilacakButceTipleri.Exists(kullanilacakKey) Then
+               butceKey = mudurluk & "|" & NormalizeProjectNameKey(projeAdi)
+               tutar = ToDoubleSafe(wsButceKaynak.Cells(i, colToplamUsd).Value)
+               AddToDict dict, butceKey, tutar
+           End If
+       End If
+   Next i
+
+   Set BuildMudurlukProjeButceDict = dict
+
+End Function
+
+Private Function GetMudurlukProjeButceFromDict(ByVal dictMudurlukProjeButce As Object, _
+                                               ByVal mudurluk As Variant, _
+                                               ByVal projeAdi As Variant) As Variant
+
+   Dim key As String
+
+   If dictMudurlukProjeButce Is Nothing Then
+       GetMudurlukProjeButceFromDict = ""
+       Exit Function
+   End If
+
+   key = NormalizeMudurlukKodu(mudurluk) & "|" & NormalizeProjectNameKey(projeAdi)
+
+   If dictMudurlukProjeButce.Exists(key) Then
+       GetMudurlukProjeButceFromDict = dictMudurlukProjeButce(key)
+   Else
+       GetMudurlukProjeButceFromDict = ""
+   End If
+
+End Function
+
+Private Function GetProjeButceFromDict(ByVal dictProjeButce As Object, _
+                                       ByVal projeKodu As Variant, _
+                                       ByVal projeAdi As Variant) As Variant
+
+   Dim projeAdiKey As String
+   Dim projeKoduKey As String
+   Dim projeKoduTextKey As String
+   Dim key As Variant
+
+   If dictProjeButce Is Nothing Then
+       GetProjeButceFromDict = ""
+       Exit Function
+   End If
+
+   projeAdiKey = NormalizeProjectNameKey(projeAdi)
+   If Len(projeAdiKey) > 0 Then
+       If dictProjeButce.Exists(projeAdiKey) Then
+           GetProjeButceFromDict = dictProjeButce(projeAdiKey)
+           Exit Function
+       End If
+   End If
+
+   projeKoduKey = NormalizeProjectCode(projeKodu)
+   If Len(projeKoduKey) > 0 Then
+       If dictProjeButce.Exists(projeKoduKey) Then
+           GetProjeButceFromDict = dictProjeButce(projeKoduKey)
+           Exit Function
+       End If
+   End If
+
+   projeKoduTextKey = NormalizeText(projeKodu)
+   If Len(projeKoduTextKey) > 0 Then
+       If dictProjeButce.Exists(projeKoduTextKey) Then
+           GetProjeButceFromDict = dictProjeButce(projeKoduTextKey)
+           Exit Function
+       End If
+   End If
+
+   If Len(projeAdiKey) > 0 Then
+       For Each key In dictProjeButce.Keys
+           If IsProjectNameKeyMatch(CStr(key), projeAdiKey) Then
+               GetProjeButceFromDict = dictProjeButce(key)
+               Exit Function
+           End If
+       Next key
+   End If
+
+   GetProjeButceFromDict = ""
+
+End Function
+
+Private Function NormalizeProjectNameKey(ByVal valueIn As Variant) As String
+
+   Dim s As String
+   Dim p As Long
+
+   s = NormalizeText(valueIn)
+
+   p = InStr(1, s, " - ", vbTextCompare)
+   If p > 0 And p < Len(s) Then
+       s = Trim(Mid(s, p + 3))
+   End If
+
+   NormalizeProjectNameKey = s
+
+End Function
+
+Private Function IsProjectNameKeyMatch(ByVal dictKey As String, ByVal projeAdiKey As String) As Boolean
+
+   Dim normalizedDictKey As String
+
+   normalizedDictKey = NormalizeProjectNameKey(dictKey)
+
+   If Len(normalizedDictKey) = 0 Or Len(projeAdiKey) = 0 Then Exit Function
+
+   If normalizedDictKey = projeAdiKey Then
+       IsProjectNameKeyMatch = True
+       Exit Function
+   End If
+
+   If Len(projeAdiKey) >= 8 And InStr(1, normalizedDictKey, projeAdiKey, vbTextCompare) > 0 Then
+       IsProjectNameKeyMatch = True
+       Exit Function
+   End If
+
+   If Len(normalizedDictKey) >= 8 And InStr(1, projeAdiKey, normalizedDictKey, vbTextCompare) > 0 Then
+       IsProjectNameKeyMatch = True
+       Exit Function
+   End If
+
+End Function
+
+Private Function ResolveProjeButceKey(ByVal projeDegeri As Variant, ByVal dictProjeAdi As Object) As String
+
+   Dim rawValue As String
+   Dim normalizedCode As String
+   Dim normalizedName As String
+   Dim key As Variant
+
+   rawValue = Trim(CStr(projeDegeri))
+   normalizedCode = NormalizeProjectCode(rawValue)
+
+   If Len(normalizedCode) = 0 Then
+       ResolveProjeButceKey = ""
+       Exit Function
+   End If
+
+   If Not dictProjeAdi Is Nothing Then
+       If dictProjeAdi.Exists(normalizedCode) Then
+           ResolveProjeButceKey = normalizedCode
+           Exit Function
+       End If
+
+       normalizedName = NormalizeText(rawValue)
+
+       For Each key In dictProjeAdi.Keys
+           If NormalizeText(dictProjeAdi(key)) = normalizedName Then
+               ResolveProjeButceKey = CStr(key)
+               Exit Function
+           End If
+       Next key
+   End If
+
+   ResolveProjeButceKey = normalizedCode
+
+End Function
+
+Private Function IsGreenFont(ByVal cell As Range) As Boolean
+
+   Dim renk As Long
+   Dim r As Long
+   Dim g As Long
+   Dim b As Long
+
+   If cell Is Nothing Then Exit Function
+
+   renk = cell.Font.Color
+   r = renk Mod 256
+   g = (renk \ 256) Mod 256
+   b = (renk \ 65536) Mod 256
+
+   IsGreenFont = (g > r And g > b And g >= 80)
+
+End Function
+
+Private Function FindWorksheetByName(ByVal wb As Workbook, ByVal sheetName As String) As Worksheet
+
+   Dim ws As Worksheet
+
+   If wb Is Nothing Then Exit Function
+
+   For Each ws In wb.Worksheets
+       If NormalizeText(ws.Name) = NormalizeText(sheetName) Then
+           Set FindWorksheetByName = ws
+           Exit Function
+       End If
+   Next ws
+
+   Set FindWorksheetByName = Nothing
+
+End Function
+
 Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal possibleHeaders As Variant) As Long
+
+   If ws Is Nothing Then
+       FindHeaderRow = 0
+       Exit Function
+   End If
 
    Dim r As Long
    Dim c As Long
@@ -977,7 +2095,7 @@ Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal possibleHeaders As V
    Dim h As Variant
    Dim cellText As String
 
-   For r = 1 To 15
+   For r = 1 To Application.Min(50, LastUsedRow(ws))
 
        lastCol = ws.Cells(r, ws.Columns.Count).End(xlToLeft).Column
 
@@ -1001,6 +2119,11 @@ Private Function FindHeaderRow(ByVal ws As Worksheet, ByVal possibleHeaders As V
 End Function
 
 Private Function FindHeaderCol(ByVal ws As Worksheet, ByVal headerRow As Long, ByVal possibleHeaders As Variant) As Long
+
+   If ws Is Nothing Or headerRow <= 0 Then
+       FindHeaderCol = 0
+       Exit Function
+   End If
 
    Dim c As Long
    Dim lastCol As Long
@@ -1050,6 +2173,11 @@ Private Function LastUsedRow(ByVal ws As Worksheet) As Long
 
    Dim f As Range
 
+   If ws Is Nothing Then
+       LastUsedRow = 1
+       Exit Function
+   End If
+
    Set f = ws.Cells.Find(What:="*", _
                          After:=ws.Range("A1"), _
                          LookIn:=xlFormulas, _
@@ -1069,6 +2197,11 @@ End Function
 Private Function LastUsedCol(ByVal ws As Worksheet) As Long
 
    Dim f As Range
+
+   If ws Is Nothing Then
+       LastUsedCol = 1
+       Exit Function
+   End If
 
    Set f = ws.Cells.Find(What:="*", _
                          After:=ws.Range("A1"), _
@@ -1216,35 +2349,82 @@ Private Function BuildProjeAdiDict(ByVal wsProjeBilgi As Worksheet) As Object
 
     Dim dict As Object
     Dim lastRow As Long
+    Dim headerRow As Long
+    Dim colProjeKodu As Long
+    Dim colProjeAdi As Long
+
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    lastRow = LastUsedRow(wsProjeBilgi)
+
+    headerRow = FindHeaderRow(wsProjeBilgi, Array("Proje Kodu", "Proje Kod", "Proje"))
+
+    If headerRow > 0 Then
+        colProjeKodu = FindHeaderCol(wsProjeBilgi, headerRow, Array("Proje Kodu", "Proje Kod", "Proje"))
+        colProjeAdi = FindHeaderCol(wsProjeBilgi, headerRow, Array("Proje Adı", "Proje Adi"))
+
+        If colProjeKodu > 0 And colProjeAdi > 0 Then
+            AddProjeAdiRangeToDict dict, wsProjeBilgi, headerRow + 1, lastRow, colProjeKodu, colProjeAdi
+        End If
+    End If
+
+    ' Eski/standart kaynak dosya yerleşimleri için fallback:
+    ' A sütunu = Proje Kodu, G sütunu = Proje Adı
+    ' B sütunu = Proje Kodu, D sütunu = Proje Adı
+    AddProjeAdiRangeToDict dict, wsProjeBilgi, 2, lastRow, 1, 7
+    AddProjeAdiRangeToDict dict, wsProjeBilgi, 2, lastRow, 2, 4
+
+    Set BuildProjeAdiDict = dict
+
+End Function
+
+Private Sub AddProjeAdiRangeToDict(ByVal dict As Object, _
+                                    ByVal wsProjeBilgi As Worksheet, _
+                                    ByVal firstRow As Long, _
+                                    ByVal lastRow As Long, _
+                                    ByVal colProjeKodu As Long, _
+                                    ByVal colProjeAdi As Long)
+
     Dim i As Long
     Dim projeKodu As String
     Dim projeAdi As String
-    
-    Set dict = CreateObject("Scripting.Dictionary")
-    
-    lastRow = LastUsedRow(wsProjeBilgi)
-    
-    ' Kaynak dosyada:
-    ' B sütunu = Proje Kodu
-    ' D sütunu = Proje Adı
-    For i = 2 To lastRow
-        
-        projeKodu = NormalizeProjectCode(wsProjeBilgi.Cells(i, "A").Value)
-        projeAdi = Trim(CStr(wsProjeBilgi.Cells(i, "G").Value))
-        
+
+    If firstRow > lastRow Then Exit Sub
+    If colProjeKodu <= 0 Or colProjeAdi <= 0 Then Exit Sub
+
+    For i = firstRow To lastRow
+
+        projeKodu = NormalizeProjectCode(wsProjeBilgi.Cells(i, colProjeKodu).Value)
+        projeAdi = Trim(CStr(wsProjeBilgi.Cells(i, colProjeAdi).Value))
+
         If Len(projeKodu) > 0 Then
             If Not dict.Exists(projeKodu) Then
                 dict.Add projeKodu, projeAdi
-            Else
-                If Len(Trim(CStr(dict(projeKodu)))) = 0 And Len(projeAdi) > 0 Then
-                    dict(projeKodu) = projeAdi
-                End If
+            ElseIf Len(Trim(CStr(dict(projeKodu)))) = 0 And Len(projeAdi) > 0 Then
+                dict(projeKodu) = projeAdi
             End If
         End If
-        
+
     Next i
-    
-    Set BuildProjeAdiDict = dict
+
+End Sub
+
+Private Function GetProjeAdiFromDict(ByVal dictProjeAdi As Object, ByVal projeKodu As String) As String
+
+    Dim key As String
+
+    key = NormalizeProjectCode(projeKodu)
+
+    If Not dictProjeAdi Is Nothing Then
+        If dictProjeAdi.Exists(key) Then
+            If Len(Trim(CStr(dictProjeAdi(key)))) > 0 Then
+                GetProjeAdiFromDict = CStr(dictProjeAdi(key))
+                Exit Function
+            End If
+        End If
+    End If
+
+    GetProjeAdiFromDict = key
 
 End Function
 
